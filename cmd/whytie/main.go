@@ -1,11 +1,13 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
 	"github.com/JumoKookbob/whytie/internal/formatter"
 	"github.com/JumoKookbob/whytie/internal/reasoning"
+	"github.com/JumoKookbob/whytie/internal/repository"
 	"github.com/JumoKookbob/whytie/internal/scanner"
 )
 
@@ -16,6 +18,18 @@ func main() {
 	}
 
 	switch os.Args[1] {
+	case "init":
+		if err := repository.Init("."); err != nil {
+			if errors.Is(err, repository.ErrAlreadyInitialized) {
+				fmt.Fprintln(os.Stderr, "WhyTie repository already initialized")
+				os.Exit(1)
+			}
+
+			fmt.Fprintf(os.Stderr, "init failed: %v\n", err)
+			os.Exit(1)
+		}
+
+		fmt.Println("Initialized WhyTie repository in .whytie")
 	case "scan":
 		if len(os.Args) < 3 {
 			fmt.Fprintln(os.Stderr, "usage: whytie scan <path>")
