@@ -21,37 +21,62 @@ type Comment struct {
 func Parse(text string) (Comment, bool) {
 	trimmed := strings.TrimSpace(text)
 
+	if !strings.HasPrefix(trimmed, "//") {
+		return Comment{}, false
+	}
+
+	content := strings.TrimPrefix(trimmed, "//")
+
+	// Go's gofmt may rewrite comments such as:
+	//
+	//   //+ SQLite
+	//
+	// into:
+	//
+	//   // + SQLite
+	//
+	// WhyTie accepts both forms.
+	if strings.HasPrefix(content, " ") {
+		content = strings.TrimPrefix(content, " ")
+	}
+
 	prefixes := []struct {
-		prefix string
+		symbol string
 		kind   Kind
 	}{
-		{"//?", Question},
-		{"//+", Decision},
-		{"//-", Rejected},
-		{"//x", Failed},
-		{"//<", Reason},
-		{"//!", Important},
+		{"?", Question},
+		{"+", Decision},
+		{"-", Rejected},
+		{"x", Failed},
+		{"<", Reason},
+		{"!", Important},
 	}
 
 	for _, p := range prefixes {
-		if !strings.HasPrefix(trimmed, p.prefix) {
+		if !strings.HasPrefix(content, p.symbol) {
 			continue
 		}
 
-		content := strings.TrimPrefix(trimmed, p.prefix)
+		rest := strings.TrimPrefix(content, p.symbol)
 
-		if !strings.HasPrefix(content, " ") {
+		// Require exactly a WhyTie symbol followed by whitespace.
+		// This rejects things such as:
+		//
+		//   //++ SQLite
+		//   //?< question
+		//   //?question
+		if !strings.HasPrefix(rest, " ") {
 			return Comment{}, false
 		}
 
-		content = strings.TrimSpace(content)
-		if content == "" {
+		rest = strings.TrimSpace(rest)
+		if rest == "" {
 			return Comment{}, false
 		}
 
 		return Comment{
 			Kind: p.kind,
-			Text: content,
+			Text: rest,
 		}, true
 	}
 
