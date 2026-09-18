@@ -568,3 +568,59 @@ func TestFindReasonsHandlesEmptyMemories(t *testing.T) {
 		)
 	}
 }
+
+func TestWhyOnQuestionWritesDecisionAndReasons(t *testing.T) {
+	store := &fakeWhyStore{
+		memories: []memory.Memory{
+			{
+				ID:          "question-1",
+				Kind:        syntax.Question,
+				Text:        "어떤 DB를 쓸까?",
+				CurrentPath: "example.go",
+				CurrentLine: 10,
+			},
+			{
+				ID:          "decision-1",
+				Kind:        syntax.Decision,
+				Text:        "SQLite를 사용한다",
+				CurrentPath: "example.go",
+				CurrentLine: 11,
+			},
+			{
+				ID:          "reason-1",
+				Kind:        syntax.Reason,
+				Text:        "local-first에 적합하기 때문에",
+				CurrentPath: "example.go",
+				CurrentLine: 12,
+			},
+			{
+				ID:          "reason-2",
+				Kind:        syntax.Reason,
+				Text:        "별도 서버가 필요 없기 때문에",
+				CurrentPath: "example.go",
+				CurrentLine: 13,
+			},
+		},
+	}
+
+	var stdout bytes.Buffer
+
+	err := Why(&stdout, store, "question-1")
+	if err != nil {
+		t.Fatalf("Why() error = %v", err)
+	}
+
+	want := "" +
+		"question: 어떤 DB를 쓸까?  example.go:10\n" +
+		"└─ decision: SQLite를 사용한다  example.go:11\n" +
+		"   └─ reason: local-first에 적합하기 때문에  example.go:12\n" +
+		"   └─ reason: 별도 서버가 필요 없기 때문에  example.go:13\n"
+
+	if stdout.String() != want {
+		t.Errorf(
+			"stdout =\n%q\nwant:\n%q",
+			stdout.String(),
+			want,
+		)
+	}
+}

@@ -77,6 +77,35 @@ func Why(w io.Writer, store storage.Store, id string) error {
 		target.CurrentLine,
 	)
 
+	if target.Kind == syntax.Question {
+		decision, ok := FindDecision(memories, id)
+		if !ok {
+			return nil
+		}
+
+		fmt.Fprintf(
+			w,
+			"└─ %s: %s  %s:%d\n",
+			decision.Kind,
+			decision.Text,
+			decision.CurrentPath,
+			decision.CurrentLine,
+		)
+
+		for _, reason := range FindReasons(memories, decision.ID) {
+			fmt.Fprintf(
+				w,
+				"   └─ %s: %s  %s:%d\n",
+				reason.Kind,
+				reason.Text,
+				reason.CurrentPath,
+				reason.CurrentLine,
+			)
+		}
+
+		return nil
+	}
+
 	for _, reason := range FindReasons(memories, id) {
 		fmt.Fprintf(
 			w,
@@ -89,6 +118,40 @@ func Why(w io.Writer, store storage.Store, id string) error {
 	}
 
 	return nil
+}
+
+func FindDecision(memories []memory.Memory, id string) (memory.Memory, bool) {
+	for i, m := range memories {
+		if m.ID != id {
+			continue
+		}
+
+		if m.Kind != syntax.Question {
+			return memory.Memory{}, false
+		}
+
+		if i+1 >= len(memories) {
+			return memory.Memory{}, false
+		}
+
+		candidate := memories[i+1]
+
+		if candidate.CurrentPath != m.CurrentPath {
+			return memory.Memory{}, false
+		}
+
+		if candidate.CurrentLine != m.CurrentLine+1 {
+			return memory.Memory{}, false
+		}
+
+		if candidate.Kind != syntax.Decision {
+			return memory.Memory{}, false
+		}
+
+		return candidate, true
+	}
+
+	return memory.Memory{}, false
 }
 
 func ParseLocation(location string) (string, int, error) {
