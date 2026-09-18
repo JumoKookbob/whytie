@@ -3,6 +3,7 @@ package reasoning
 import (
 	"testing"
 
+	"github.com/JumoKookbob/whytie/internal/memory"
 	"github.com/JumoKookbob/whytie/internal/scanner"
 	"github.com/JumoKookbob/whytie/internal/syntax"
 )
@@ -297,5 +298,96 @@ func TestAttachReasonsPreservesSourceLocation(t *testing.T) {
 
 	if reason.Line != 22 {
 		t.Errorf("reason line = %d, want 22", reason.Line)
+	}
+}
+
+func TestGroupRestoredMemoriesByCurrentPath(t *testing.T) {
+	memories := []memory.Memory{
+		{
+			ID:          "memory-1",
+			Kind:        syntax.Decision,
+			Text:        "SQLite",
+			CreatedPath: "internal/store/db.go",
+			CreatedLine: 21,
+			CurrentPath: "internal/store/db.go",
+			CurrentLine: 40,
+		},
+		{
+			ID:          "memory-2",
+			Kind:        syntax.Reason,
+			Text:        "local-first에 적합함",
+			CreatedPath: "internal/store/db.go",
+			CreatedLine: 22,
+			CurrentPath: "internal/store/db.go",
+			CurrentLine: 41,
+		},
+	}
+
+	comments := make([]scanner.SourceComment, 0, len(memories))
+
+	for _, m := range memories {
+		comments = append(comments, memory.ToSourceComment(m))
+	}
+
+	blocks := Group(comments)
+
+	if len(blocks) != 1 {
+		t.Fatalf("Group() returned %d blocks, want 1", len(blocks))
+	}
+
+	items := AttachReasons(blocks[0])
+
+	if len(items) != 1 {
+		t.Fatalf("AttachReasons() returned %d items, want 1", len(items))
+	}
+
+	if len(items[0].Reasons) != 1 {
+		t.Fatalf(
+			"decision has %d reasons, want 1",
+			len(items[0].Reasons),
+		)
+	}
+
+	if items[0].Reasons[0].Text != "local-first에 적합함" {
+		t.Errorf(
+			"reason text = %q, want %q",
+			items[0].Reasons[0].Text,
+			"local-first에 적합함",
+		)
+	}
+}
+
+func TestGroupRestoredMemoriesSeparatesDifferentFiles(t *testing.T) {
+	memories := []memory.Memory{
+		{
+			ID:          "memory-1",
+			Kind:        syntax.Decision,
+			Text:        "SQLite",
+			CreatedPath: "internal/store/db.go",
+			CreatedLine: 20,
+			CurrentPath: "internal/store/db.go",
+			CurrentLine: 40,
+		},
+		{
+			ID:          "memory-2",
+			Kind:        syntax.Reason,
+			Text:        "다른 파일의 이유",
+			CreatedPath: "internal/config/config.go",
+			CreatedLine: 20,
+			CurrentPath: "internal/config/config.go",
+			CurrentLine: 41,
+		},
+	}
+
+	comments := make([]scanner.SourceComment, 0, len(memories))
+
+	for _, m := range memories {
+		comments = append(comments, memory.ToSourceComment(m))
+	}
+
+	blocks := Group(comments)
+
+	if len(blocks) != 2 {
+		t.Fatalf("Group() returned %d blocks, want 2", len(blocks))
 	}
 }

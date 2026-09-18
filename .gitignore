@@ -1,0 +1,5 @@
+# WhyTie local repository
+.whytie/
+
+# Local build artifacts
+whytie.exe

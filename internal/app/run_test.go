@@ -1,0 +1,411 @@
+package app
+
+import (
+	"bytes"
+	"os"
+	"path/filepath"
+	"testing"
+)
+
+func TestRunListOpensRepositoryAndWritesMemories(t *testing.T) {
+	root := t.TempDir()
+
+	if err := Init(root); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	source := `package example
+
+//+ SQLite를 사용한다
+//< local-first에 적합하기 때문에
+`
+
+	sourcePath := filepath.Join(root, "example.go")
+
+	if err := os.WriteFile(sourcePath, []byte(source), 0644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	store, err := OpenStore(root)
+	if err != nil {
+		t.Fatalf("OpenStore() error = %v", err)
+	}
+
+	var scanOutput bytes.Buffer
+
+	if err := Scan(&scanOutput, store, root); err != nil {
+		store.Close()
+		t.Fatalf("Scan() error = %v", err)
+	}
+
+	if err := store.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+
+	var output bytes.Buffer
+
+	if err := RunList(&output, root); err != nil {
+		t.Fatalf("RunList() error = %v", err)
+	}
+
+	want := "decision: SQLite를 사용한다  example.go:3\n" +
+		"└─ reason: local-first에 적합하기 때문에  example.go:4\n"
+
+	if output.String() != want {
+		t.Errorf(
+			"RunList() output =\n%q\nwant:\n%q",
+			output.String(),
+			want,
+		)
+	}
+}
+
+func TestOpenStoreOpensRepositoryDatabase(t *testing.T) {
+	root := t.TempDir()
+
+	if err := Init(root); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	store, err := OpenStore(root)
+	if err != nil {
+		t.Fatalf("OpenStore() error = %v", err)
+	}
+	defer store.Close()
+
+	path := filepath.Join(root, ".whytie", "whytie.db")
+
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("database file not created: %v", err)
+	}
+}
+
+func TestRunScanOpensRepositoryScansAndPersists(t *testing.T) {
+	root := t.TempDir()
+
+	if err := Init(root); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	source := `package example
+
+//+ SQLite를 사용한다
+//< local-first에 적합하기 때문에
+`
+
+	sourcePath := filepath.Join(root, "example.go")
+
+	if err := os.WriteFile(sourcePath, []byte(source), 0644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	var output bytes.Buffer
+
+	if err := RunScan(&output, root, root); err != nil {
+		t.Fatalf("RunScan() error = %v", err)
+	}
+
+	want := "decision: SQLite를 사용한다  example.go:3\n" +
+		"└─ reason: local-first에 적합하기 때문에  example.go:4\n"
+
+	if output.String() != want {
+		t.Errorf(
+			"RunScan() output =\n%q\nwant:\n%q",
+			output.String(),
+			want,
+		)
+	}
+
+	store, err := OpenStore(root)
+	if err != nil {
+		t.Fatalf("OpenStore() error = %v", err)
+	}
+	defer store.Close()
+
+	memories, err := store.List()
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+
+	if len(memories) != 2 {
+		t.Fatalf("persisted memories = %d, want 2", len(memories))
+	}
+}
+
+func TestRunListFromNestedDirectoryFindsRepositoryRoot(t *testing.T) {
+	root := t.TempDir()
+
+	if err := Init(root); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	source := `package example
+
+//+ SQLite를 사용한다
+`
+
+	sourcePath := filepath.Join(root, "example.go")
+	if err := os.WriteFile(sourcePath, []byte(source), 0644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	var scanOutput bytes.Buffer
+	if err := RunScan(&scanOutput, root, root); err != nil {
+		t.Fatalf("RunScan() error = %v", err)
+	}
+
+	nested := filepath.Join(root, "internal", "example")
+	if err := os.MkdirAll(nested, 0755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+
+	var output bytes.Buffer
+
+	if err := RunListFrom(&output, nested); err != nil {
+		t.Fatalf("RunListFrom() error = %v", err)
+	}
+
+	want := "decision: SQLite를 사용한다  example.go:3\n"
+
+	if output.String() != want {
+		t.Errorf(
+			"RunListFrom() output =\n%q\nwant:\n%q",
+			output.String(),
+			want,
+		)
+	}
+}
+
+func TestRunScanFromNestedDirectoryFindsRepositoryRoot(t *testing.T) {
+	root := t.TempDir()
+
+	if err := Init(root); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	source := `package example
+
+//+ SQLite를 사용한다
+//< local-first에 적합하기 때문에
+`
+
+	sourcePath := filepath.Join(root, "example.go")
+	if err := os.WriteFile(sourcePath, []byte(source), 0644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	nested := filepath.Join(root, "internal", "example")
+	if err := os.MkdirAll(nested, 0755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+
+	var output bytes.Buffer
+
+	if err := RunScanFrom(&output, nested, root); err != nil {
+		t.Fatalf("RunScanFrom() error = %v", err)
+	}
+
+	want := "decision: SQLite를 사용한다  example.go:3\n" +
+		"└─ reason: local-first에 적합하기 때문에  example.go:4\n"
+
+	if output.String() != want {
+		t.Errorf(
+			"RunScanFrom() output =\n%q\nwant:\n%q",
+			output.String(),
+			want,
+		)
+	}
+
+	var listOutput bytes.Buffer
+
+	if err := RunListFrom(&listOutput, nested); err != nil {
+		t.Fatalf("RunListFrom() error = %v", err)
+	}
+
+	if listOutput.String() != want {
+		t.Errorf(
+			"persisted output =\n%q\nwant:\n%q",
+			listOutput.String(),
+			want,
+		)
+	}
+}
+
+func TestRunWithoutCommandWritesName(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	exitCode := Run(nil, &stdout, &stderr, ".")
+
+	if exitCode != 0 {
+		t.Errorf("Run() exit code = %d, want 0", exitCode)
+	}
+
+	if stdout.String() != "WhyTie\n" {
+		t.Errorf(
+			"stdout = %q, want %q",
+			stdout.String(),
+			"WhyTie\n",
+		)
+	}
+
+	if stderr.String() != "" {
+		t.Errorf("stderr = %q, want empty", stderr.String())
+	}
+}
+
+func TestRunRejectsUnknownCommand(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	exitCode := Run(
+		[]string{"wat"},
+		&stdout,
+		&stderr,
+		".",
+	)
+
+	if exitCode != 1 {
+		t.Errorf("Run() exit code = %d, want 1", exitCode)
+	}
+
+	if stdout.String() != "" {
+		t.Errorf("stdout = %q, want empty", stdout.String())
+	}
+
+	want := "unknown command: wat\n"
+
+	if stderr.String() != want {
+		t.Errorf(
+			"stderr = %q, want %q",
+			stderr.String(),
+			want,
+		)
+	}
+}
+
+func TestRunInitCreatesRepository(t *testing.T) {
+	root := t.TempDir()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	exitCode := Run(
+		[]string{"init"},
+		&stdout,
+		&stderr,
+		root,
+	)
+
+	if exitCode != 0 {
+		t.Errorf("Run() exit code = %d, want 0", exitCode)
+	}
+
+	want := "Initialized WhyTie repository in .whytie\n"
+
+	if stdout.String() != want {
+		t.Errorf(
+			"stdout = %q, want %q",
+			stdout.String(),
+			want,
+		)
+	}
+
+	if stderr.String() != "" {
+		t.Errorf("stderr = %q, want empty", stderr.String())
+	}
+
+	path := filepath.Join(root, ".whytie")
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("Stat(%q) error = %v", path, err)
+	}
+
+	if !info.IsDir() {
+		t.Fatalf("%q is not a directory", path)
+	}
+}
+
+func TestRunListCommand(t *testing.T) {
+	root := t.TempDir()
+
+	if err := Init(root); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	source := `package example
+
+//+ SQLite를 사용한다
+//< local-first에 적합하기 때문에
+`
+
+	sourcePath := filepath.Join(root, "example.go")
+	if err := os.WriteFile(sourcePath, []byte(source), 0644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	var scanOutput bytes.Buffer
+	if err := RunScanFrom(&scanOutput, root, root); err != nil {
+		t.Fatalf("RunScanFrom() error = %v", err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	exitCode := Run(
+		[]string{"list"},
+		&stdout,
+		&stderr,
+		root,
+	)
+
+	if exitCode != 0 {
+		t.Errorf("Run() exit code = %d, want 0", exitCode)
+	}
+
+	want := "decision: SQLite를 사용한다  example.go:3\n" +
+		"└─ reason: local-first에 적합하기 때문에  example.go:4\n"
+
+	if stdout.String() != want {
+		t.Errorf(
+			"stdout =\n%q\nwant:\n%q",
+			stdout.String(),
+			want,
+		)
+	}
+
+	if stderr.String() != "" {
+		t.Errorf("stderr = %q, want empty", stderr.String())
+	}
+}
+
+func TestRunScanRequiresPath(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	exitCode := Run(
+		[]string{"scan"},
+		&stdout,
+		&stderr,
+		".",
+	)
+
+	if exitCode != 1 {
+		t.Errorf("Run() exit code = %d, want 1", exitCode)
+	}
+
+	if stdout.String() != "" {
+		t.Errorf("stdout = %q, want empty", stdout.String())
+	}
+
+	want := "usage: whytie scan <path>\n"
+
+	if stderr.String() != want {
+		t.Errorf(
+			"stderr = %q, want %q",
+			stderr.String(),
+			want,
+		)
+	}
+}
