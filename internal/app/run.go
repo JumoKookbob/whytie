@@ -54,6 +54,10 @@ func Run(args []string, stdout io.Writer, stderr io.Writer, start string) int {
 	}
 
 	switch args[0] {
+	case "version":
+		fmt.Fprintln(stdout, "WhyTie v0.1.0")
+		return 0
+
 	case "init":
 		if err := Init(start); err != nil {
 			if errors.Is(err, repository.ErrAlreadyInitialized) {

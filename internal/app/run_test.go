@@ -695,3 +695,28 @@ func TestWhyOnReasonWritesOnlyReason(t *testing.T) {
 		)
 	}
 }
+
+func TestRunVersionCommand(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	exitCode := Run(
+		[]string{"version"},
+		&stdout,
+		&stderr,
+		".",
+	)
+
+	if exitCode != 0 {
+		t.Fatalf("exitCode = %d, want 0", exitCode)
+	}
+
+	want := "WhyTie v0.1.0\n"
+	if stdout.String() != want {
+		t.Errorf("stdout = %q, want %q", stdout.String(), want)
+	}
+
+	if stderr.String() != "" {
+		t.Errorf("stderr = %q, want empty", stderr.String())
+	}
+}
