@@ -316,3 +316,44 @@ func TestSQLiteStoreSaveUpdatesExistingMemory(t *testing.T) {
 		t.Errorf("CurrentLine = %d, want 40", got.CurrentLine)
 	}
 }
+
+func TestSQLiteStoreDeleteMemory(t *testing.T) {
+	root := t.TempDir()
+
+	if err := os.MkdirAll(filepath.Join(root, ".whytie"), 0755); err != nil {
+		t.Fatalf("create .whytie: %v", err)
+	}
+
+	store, err := OpenSQLite(root)
+	if err != nil {
+		t.Fatalf("OpenSQLite() error = %v", err)
+	}
+	defer store.Close()
+
+	m := memory.Memory{
+		ID:          "memory-delete",
+		Kind:        syntax.Decision,
+		Text:        "SQLite",
+		CreatedPath: "example.go",
+		CreatedLine: 10,
+		CurrentPath: "example.go",
+		CurrentLine: 10,
+	}
+
+	if err := store.Save(m); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	if err := store.Delete(m.ID); err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+
+	memories, err := store.List()
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+
+	if len(memories) != 0 {
+		t.Fatalf("List() returned %d memories after Delete(), want 0", len(memories))
+	}
+}
