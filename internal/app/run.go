@@ -55,7 +55,7 @@ func Run(args []string, stdout io.Writer, stderr io.Writer, start string) int {
 
 	switch args[0] {
 	case "version":
-		fmt.Fprintln(stdout, "WhyTie v0.1.0")
+		fmt.Fprintln(stdout, "WhyTie v0.1.1")
 		return 0
 
 	case "init":
