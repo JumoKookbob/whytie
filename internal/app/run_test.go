@@ -5,6 +5,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/JumoKookbob/whytie/internal/memory"
+	"github.com/JumoKookbob/whytie/internal/syntax"
 )
 
 func TestRunListOpensRepositoryAndWritesMemories(t *testing.T) {
@@ -405,6 +408,289 @@ func TestRunScanRequiresPath(t *testing.T) {
 		t.Errorf(
 			"stderr = %q, want %q",
 			stderr.String(),
+			want,
+		)
+	}
+}
+
+func TestRunWhyRequiresTarget(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	exitCode := Run(
+		[]string{"why"},
+		&stdout,
+		&stderr,
+		".",
+	)
+
+	if exitCode != 1 {
+		t.Errorf("Run() exit code = %d, want 1", exitCode)
+	}
+
+	want := "usage: whytie why <memory-id|file:line>\n"
+
+	if stderr.String() != want {
+		t.Errorf("stderr = %q, want %q", stderr.String(), want)
+	}
+}
+
+func TestRunWhyCommand(t *testing.T) {
+	root := t.TempDir()
+
+	if err := Init(root); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	store, err := OpenStore(root)
+	if err != nil {
+		t.Fatalf("OpenStore() error = %v", err)
+	}
+
+	decision := memory.Memory{
+		ID:          "decision-1",
+		Kind:        syntax.Decision,
+		Text:        "SQLite를 사용한다",
+		CreatedPath: "example.go",
+		CreatedLine: 3,
+		CurrentPath: "example.go",
+		CurrentLine: 3,
+	}
+
+	reason := memory.Memory{
+		ID:          "reason-1",
+		Kind:        syntax.Reason,
+		Text:        "local-first에 적합하기 때문에",
+		CreatedPath: "example.go",
+		CreatedLine: 4,
+		CurrentPath: "example.go",
+		CurrentLine: 4,
+	}
+
+	if err := store.Save(decision); err != nil {
+		store.Close()
+		t.Fatalf("Save(decision) error = %v", err)
+	}
+
+	if err := store.Save(reason); err != nil {
+		store.Close()
+		t.Fatalf("Save(reason) error = %v", err)
+	}
+
+	if err := store.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	exitCode := Run(
+		[]string{"why", "decision-1"},
+		&stdout,
+		&stderr,
+		root,
+	)
+
+	if exitCode != 0 {
+		t.Errorf("Run() exit code = %d, want 0", exitCode)
+	}
+
+	want := "" +
+		"decision: SQLite를 사용한다  example.go:3\n" +
+		"└─ reason: local-first에 적합하기 때문에  example.go:4\n"
+
+	if stdout.String() != want {
+		t.Errorf(
+			"stdout =\n%q\nwant:\n%q",
+			stdout.String(),
+			want,
+		)
+	}
+
+	if stderr.String() != "" {
+		t.Errorf("stderr = %q, want empty", stderr.String())
+	}
+}
+
+func TestRunWhyCommandAcceptsLocation(t *testing.T) {
+	root := t.TempDir()
+
+	if err := Init(root); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	store, err := OpenStore(root)
+	if err != nil {
+		t.Fatalf("OpenStore() error = %v", err)
+	}
+
+	decision := memory.Memory{
+		ID:          "decision-location",
+		Kind:        syntax.Decision,
+		Text:        "SQLite를 사용한다",
+		CreatedPath: "example.go",
+		CreatedLine: 10,
+		CurrentPath: "example.go",
+		CurrentLine: 10,
+	}
+
+	reason := memory.Memory{
+		ID:          "reason-location",
+		Kind:        syntax.Reason,
+		Text:        "local-first에 적합하기 때문에",
+		CreatedPath: "example.go",
+		CreatedLine: 11,
+		CurrentPath: "example.go",
+		CurrentLine: 11,
+	}
+
+	if err := store.Save(decision); err != nil {
+		store.Close()
+		t.Fatalf("Save(decision) error = %v", err)
+	}
+
+	if err := store.Save(reason); err != nil {
+		store.Close()
+		t.Fatalf("Save(reason) error = %v", err)
+	}
+
+	if err := store.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	exitCode := Run(
+		[]string{"why", "example.go:10"},
+		&stdout,
+		&stderr,
+		root,
+	)
+
+	if exitCode != 0 {
+		t.Errorf("Run() exit code = %d, want 0", exitCode)
+	}
+
+	want := "" +
+		"decision: SQLite를 사용한다  example.go:10\n" +
+		"└─ reason: local-first에 적합하기 때문에  example.go:11\n"
+
+	if stdout.String() != want {
+		t.Errorf(
+			"stdout =\n%q\nwant:\n%q",
+			stdout.String(),
+			want,
+		)
+	}
+
+	if stderr.String() != "" {
+		t.Errorf("stderr = %q, want empty", stderr.String())
+	}
+}
+
+func TestRunWhyRejectsInvalidLocation(t *testing.T) {
+	root := t.TempDir()
+
+	if err := Init(root); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	exitCode := Run(
+		[]string{"why", "example.go:abc"},
+		&stdout,
+		&stderr,
+		root,
+	)
+
+	if exitCode != 1 {
+		t.Errorf("Run() exit code = %d, want 1", exitCode)
+	}
+
+	want := "why failed: invalid line number: abc\n"
+
+	if stderr.String() != want {
+		t.Errorf("stderr = %q, want %q", stderr.String(), want)
+	}
+
+	if stdout.String() != "" {
+		t.Errorf("stdout = %q, want empty", stdout.String())
+	}
+}
+
+func TestRunWhyRejectsMissingMemoryID(t *testing.T) {
+	root := t.TempDir()
+
+	if err := Init(root); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	exitCode := Run(
+		[]string{"why", "does-not-exist"},
+		&stdout,
+		&stderr,
+		root,
+	)
+
+	if exitCode != 1 {
+		t.Errorf("Run() exit code = %d, want 1", exitCode)
+	}
+
+	if stdout.String() != "" {
+		t.Errorf("stdout = %q, want empty", stdout.String())
+	}
+
+	if stderr.String() == "" {
+		t.Fatal("stderr = empty, want why failure")
+	}
+}
+
+func TestWhyOnReasonWritesOnlyReason(t *testing.T) {
+	store := &fakeWhyStore{
+		memories: []memory.Memory{
+			{
+				ID:          "decision-1",
+				Kind:        syntax.Decision,
+				Text:        "SQLite를 사용한다",
+				CurrentPath: "example.go",
+				CurrentLine: 10,
+			},
+			{
+				ID:          "reason-1",
+				Kind:        syntax.Reason,
+				Text:        "local-first에 적합하기 때문에",
+				CurrentPath: "example.go",
+				CurrentLine: 11,
+			},
+			{
+				ID:          "reason-2",
+				Kind:        syntax.Reason,
+				Text:        "설정이 단순하기 때문에",
+				CurrentPath: "example.go",
+				CurrentLine: 12,
+			},
+		},
+	}
+
+	var stdout bytes.Buffer
+
+	err := Why(&stdout, store, "reason-1")
+	if err != nil {
+		t.Fatalf("Why() error = %v", err)
+	}
+
+	want := "reason: local-first에 적합하기 때문에  example.go:11\n"
+
+	if stdout.String() != want {
+		t.Errorf(
+			"stdout =\n%q\nwant:\n%q",
+			stdout.String(),
 			want,
 		)
 	}

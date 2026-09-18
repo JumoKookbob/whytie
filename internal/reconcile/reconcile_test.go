@@ -472,3 +472,57 @@ func TestReconcileAllUsesEarlierResults(t *testing.T) {
 		t.Errorf("CurrentLine = %d, want 40", got[1].CurrentLine)
 	}
 }
+
+func TestReconcileUpdatesTextAtSameLocation(t *testing.T) {
+	existing := []memory.Memory{
+		{
+			ID:          "memory-1",
+			Kind:        syntax.Decision,
+			Text:        "SQLite를 사용한다",
+			CreatedPath: "demo.go",
+			CreatedLine: 5,
+			CurrentPath: "demo.go",
+			CurrentLine: 5,
+		},
+	}
+
+	source := scanner.SourceComment{
+		Kind:         syntax.Decision,
+		Text:         "SQLite WAL 모드를 사용한다",
+		RelativePath: "demo.go",
+		Line:         5,
+	}
+
+	got, err := Reconcile(source, existing)
+	if err != nil {
+		t.Fatalf("Reconcile() error = %v", err)
+	}
+
+	if got.ID != "memory-1" {
+		t.Errorf("ID = %q, want %q", got.ID, "memory-1")
+	}
+
+	if got.Text != "SQLite WAL 모드를 사용한다" {
+		t.Errorf(
+			"Text = %q, want %q",
+			got.Text,
+			"SQLite WAL 모드를 사용한다",
+		)
+	}
+
+	if got.CreatedPath != "demo.go" {
+		t.Errorf("CreatedPath = %q, want %q", got.CreatedPath, "demo.go")
+	}
+
+	if got.CreatedLine != 5 {
+		t.Errorf("CreatedLine = %d, want 5", got.CreatedLine)
+	}
+
+	if got.CurrentPath != "demo.go" {
+		t.Errorf("CurrentPath = %q, want %q", got.CurrentPath, "demo.go")
+	}
+
+	if got.CurrentLine != 5 {
+		t.Errorf("CurrentLine = %d, want 5", got.CurrentLine)
+	}
+}

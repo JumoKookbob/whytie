@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/JumoKookbob/whytie/internal/repository"
 )
@@ -84,6 +85,44 @@ func Run(args []string, stdout io.Writer, stderr io.Writer, start string) int {
 
 		if err := RunScanFrom(stdout, start, args[1]); err != nil {
 			fmt.Fprintf(stderr, "scan failed: %v\n", err)
+			return 1
+		}
+
+		return 0
+
+	case "why":
+		if len(args) < 2 {
+			fmt.Fprintln(stderr, "usage: whytie why <memory-id|file:line>")
+			return 1
+		}
+
+		root, err := repository.FindRoot(start)
+		if err != nil {
+			fmt.Fprintf(stderr, "why failed: %v\n", err)
+			return 1
+		}
+
+		store, err := OpenStore(root)
+		if err != nil {
+			fmt.Fprintf(stderr, "why failed: %v\n", err)
+			return 1
+		}
+		defer store.Close()
+
+		target := args[1]
+
+		if strings.Contains(target, ":") {
+			if _, _, parseErr := ParseLocation(target); parseErr != nil {
+				fmt.Fprintf(stderr, "why failed: %v\n", parseErr)
+				return 1
+			}
+
+			err = WhyAt(stdout, store, target)
+		} else {
+			err = Why(stdout, store, target)
+		}
+		if err != nil {
+			fmt.Fprintf(stderr, "why failed: %v\n", err)
 			return 1
 		}
 
