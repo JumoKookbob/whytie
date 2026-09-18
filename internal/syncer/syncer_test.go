@@ -27,6 +27,19 @@ func (s *fakeStore) Save(m memory.Memory) error {
 	return nil
 }
 
+func (s *fakeStore) Delete(id string) error {
+	for i, m := range s.memories {
+		if m.ID != id {
+			continue
+		}
+
+		s.memories = append(s.memories[:i], s.memories[i+1:]...)
+		return nil
+	}
+
+	return nil
+}
+
 func (s *fakeStore) Get(id string) (memory.Memory, error) {
 	for _, m := range s.memories {
 		if m.ID == id {
@@ -209,5 +222,37 @@ func TestSyncPersistsToSQLiteAcrossReopen(t *testing.T) {
 
 	if saved[0].CurrentLine != 40 {
 		t.Errorf("saved CurrentLine = %d, want 40", saved[0].CurrentLine)
+	}
+}
+
+func TestSyncRemovesDeletedMemoryFromStore(t *testing.T) {
+	store := &fakeStore{
+		memories: []memory.Memory{
+			{
+				ID:          "memory-1",
+				Kind:        syntax.Decision,
+				Text:        "SQLite를 사용한다",
+				CreatedPath: "example.go",
+				CreatedLine: 10,
+				CurrentPath: "example.go",
+				CurrentLine: 10,
+			},
+		},
+	}
+
+	sources := []scanner.SourceComment{}
+
+	_, err := Sync(store, sources)
+	if err != nil {
+		t.Fatalf("Sync() error = %v", err)
+	}
+
+	saved, err := store.List()
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+
+	if len(saved) != 0 {
+		t.Fatalf("store contains %d memories, want 0", len(saved))
 	}
 }

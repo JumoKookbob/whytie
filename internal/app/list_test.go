@@ -16,6 +16,10 @@ func (s *listStore) Save(m memory.Memory) error {
 	return nil
 }
 
+func (s *listStore) Delete(id string) error {
+	return nil
+}
+
 func (s *listStore) Get(id string) (memory.Memory, error) {
 	return memory.Memory{}, nil
 }

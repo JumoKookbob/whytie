@@ -6,4 +6,5 @@ type Store interface {
 	Save(memory.Memory) error
 	Get(id string) (memory.Memory, error)
 	List() ([]memory.Memory, error)
+	Delete(id string) error
 }

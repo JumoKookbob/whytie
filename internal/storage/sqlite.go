@@ -82,6 +82,15 @@ func (s *SQLiteStore) Save(m memory.Memory) error {
 	return err
 }
 
+func (s *SQLiteStore) Delete(id string) error {
+	_, err := s.db.Exec(`
+		DELETE FROM memories
+		WHERE id = ?
+	`, id)
+
+	return err
+}
+
 func (s *SQLiteStore) Get(id string) (memory.Memory, error) {
 	var m memory.Memory
 

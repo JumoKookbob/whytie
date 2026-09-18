@@ -21,6 +21,22 @@ func Sync(
 		return nil, err
 	}
 
+	activeIDs := make(map[string]struct{}, len(reconciled))
+
+	for _, m := range reconciled {
+		activeIDs[m.ID] = struct{}{}
+	}
+
+	for _, m := range existing {
+		if _, ok := activeIDs[m.ID]; ok {
+			continue
+		}
+
+		if err := store.Delete(m.ID); err != nil {
+			return nil, err
+		}
+	}
+
 	for _, m := range reconciled {
 		if err := store.Save(m); err != nil {
 			return nil, err

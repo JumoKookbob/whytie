@@ -138,6 +138,10 @@ func (s *fakeWhyStore) Save(memory.Memory) error {
 	return nil
 }
 
+func (s *fakeWhyStore) Delete(id string) error {
+	return nil
+}
+
 func (s *fakeWhyStore) Get(id string) (memory.Memory, error) {
 	for _, m := range s.memories {
 		if m.ID == id {
