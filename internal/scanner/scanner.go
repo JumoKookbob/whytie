@@ -6,11 +6,11 @@ import (
 	"io/fs"
 	"path/filepath"
 
-	"github.com/JumoKookbob/origin-dev/internal/origincomment"
+	"github.com/JumoKookbob/whytie/internal/syntax"
 )
 
 type SourceComment struct {
-	Kind         origincomment.Kind
+	Kind         syntax.Kind
 	Text         string
 	File         string
 	RelativePath string
@@ -34,7 +34,7 @@ func ScanFile(path string) ([]SourceComment, error) {
 
 	for _, group := range file.Comments {
 		for _, comment := range group.List {
-			parsed, ok := origincomment.Parse(comment.Text)
+			parsed, ok := syntax.Parse(comment.Text)
 			if !ok {
 				continue
 			}
@@ -63,7 +63,7 @@ func ScanDir(root string) ([]SourceComment, error) {
 
 		if entry.IsDir() {
 			switch entry.Name() {
-			case ".git", ".origin":
+			case ".git", ".whytie":
 				if path != root {
 					return filepath.SkipDir
 				}

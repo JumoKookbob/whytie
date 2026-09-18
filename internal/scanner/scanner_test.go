@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/JumoKookbob/origin-dev/internal/origincomment"
+	"github.com/JumoKookbob/whytie/internal/syntax"
 )
 
 func TestScanFile(t *testing.T) {
@@ -35,17 +35,17 @@ func example() {
 	}
 
 	tests := []struct {
-		kind origincomment.Kind
+		kind syntax.Kind
 		text string
 		line int
 	}{
 		{
-			kind: origincomment.Decision,
+			kind: syntax.Decision,
 			text: "SQLite",
 			line: 5,
 		},
 		{
-			kind: origincomment.Reason,
+			kind: syntax.Reason,
 			text: "local-first",
 			line: 6,
 		},
@@ -167,7 +167,7 @@ func main() {}
 	}
 
 	if _, ok := got["important:this must not be scanned"]; ok {
-		t.Error("ScanDir() scanned Origin comment from non-Go file")
+		t.Error("ScanDir() scanned WhyTie comment from non-Go file")
 	}
 }
 
@@ -175,14 +175,14 @@ func TestScanDirSkipsInternalDirectories(t *testing.T) {
 	root := t.TempDir()
 
 	gitDir := filepath.Join(root, ".git")
-	originDir := filepath.Join(root, ".origin")
+	whytieDir := filepath.Join(root, ".whytie")
 
 	if err := os.MkdirAll(gitDir, 0755); err != nil {
 		t.Fatalf("create .git: %v", err)
 	}
 
-	if err := os.MkdirAll(originDir, 0755); err != nil {
-		t.Fatalf("create .origin: %v", err)
+	if err := os.MkdirAll(whytieDir, 0755); err != nil {
+		t.Fatalf("create .whytie: %v", err)
 	}
 
 	mainSource := `package main
@@ -195,9 +195,9 @@ func TestScanDirSkipsInternalDirectories(t *testing.T) {
 //! should not scan git
 `
 
-	originSource := `package ignored
+	whytieSource := `package ignored
 
-//? should not scan origin
+//? should not scan whytie
 `
 
 	if err := os.WriteFile(
@@ -217,11 +217,11 @@ func TestScanDirSkipsInternalDirectories(t *testing.T) {
 	}
 
 	if err := os.WriteFile(
-		filepath.Join(originDir, "ignored.go"),
-		[]byte(originSource),
+		filepath.Join(whytieDir, "ignored.go"),
+		[]byte(whytieSource),
 		0644,
 	); err != nil {
-		t.Fatalf("write .origin/ignored.go: %v", err)
+		t.Fatalf("write .whytie/ignored.go: %v", err)
 	}
 
 	comments, err := ScanDir(root)
@@ -235,8 +235,8 @@ func TestScanDirSkipsInternalDirectories(t *testing.T) {
 
 	got := comments[0]
 
-	if got.Kind != origincomment.Decision {
-		t.Errorf("kind = %q, want %q", got.Kind, origincomment.Decision)
+	if got.Kind != syntax.Decision {
+		t.Errorf("kind = %q, want %q", got.Kind, syntax.Decision)
 	}
 
 	if got.Text != "SQLite" {

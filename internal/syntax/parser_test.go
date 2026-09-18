@@ -1,4 +1,4 @@
-package origincomment
+package syntax
 
 import "testing"
 

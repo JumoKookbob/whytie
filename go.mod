@@ -1,3 +1,3 @@
-module github.com/JumoKookbob/origin-dev
+module github.com/JumoKookbob/whytie
 
 go 1.27.1
