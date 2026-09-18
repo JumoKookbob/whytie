@@ -237,3 +237,65 @@ func TestAttachReasonsPreservesOrphanReason(t *testing.T) {
 		)
 	}
 }
+
+func TestAttachReasonsPreservesSourceLocation(t *testing.T) {
+	block := Block{
+		Items: []scanner.SourceComment{
+			{
+				Kind:         syntax.Decision,
+				Text:         "SQLite",
+				File:         `C:\project\internal\store\db.go`,
+				RelativePath: "internal/store/db.go",
+				Line:         21,
+			},
+			{
+				Kind:         syntax.Reason,
+				Text:         "local-first에 적합함",
+				File:         `C:\project\internal\store\db.go`,
+				RelativePath: "internal/store/db.go",
+				Line:         22,
+			},
+		},
+	}
+
+	items := AttachReasons(block)
+
+	if len(items) != 1 {
+		t.Fatalf("AttachReasons() returned %d items, want 1", len(items))
+	}
+
+	decision := items[0].Comment
+
+	if decision.RelativePath != "internal/store/db.go" {
+		t.Errorf(
+			"decision path = %q, want %q",
+			decision.RelativePath,
+			"internal/store/db.go",
+		)
+	}
+
+	if decision.Line != 21 {
+		t.Errorf("decision line = %d, want 21", decision.Line)
+	}
+
+	if len(items[0].Reasons) != 1 {
+		t.Fatalf(
+			"decision has %d reasons, want 1",
+			len(items[0].Reasons),
+		)
+	}
+
+	reason := items[0].Reasons[0]
+
+	if reason.RelativePath != "internal/store/db.go" {
+		t.Errorf(
+			"reason path = %q, want %q",
+			reason.RelativePath,
+			"internal/store/db.go",
+		)
+	}
+
+	if reason.Line != 22 {
+		t.Errorf("reason line = %d, want 22", reason.Line)
+	}
+}
