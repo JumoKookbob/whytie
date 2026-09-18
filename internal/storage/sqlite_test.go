@@ -357,3 +357,70 @@ func TestSQLiteStoreDeleteMemory(t *testing.T) {
 		t.Fatalf("List() returned %d memories after Delete(), want 0", len(memories))
 	}
 }
+
+func TestSQLiteStoreListOrdersByCurrentSourceLocation(t *testing.T) {
+	root := t.TempDir()
+
+	if err := os.MkdirAll(filepath.Join(root, ".whytie"), 0755); err != nil {
+		t.Fatalf("create .whytie: %v", err)
+	}
+
+	store, err := OpenSQLite(root)
+	if err != nil {
+		t.Fatalf("OpenSQLite() error = %v", err)
+	}
+	defer store.Close()
+
+	memories := []memory.Memory{
+		{
+			ID:          "reason",
+			Kind:        syntax.Reason,
+			Text:        "local-first",
+			CreatedPath: "example.go",
+			CreatedLine: 12,
+			CurrentPath: "example.go",
+			CurrentLine: 12,
+		},
+		{
+			ID:          "question",
+			Kind:        syntax.Question,
+			Text:        "어떤 DB를 쓸까?",
+			CreatedPath: "example.go",
+			CreatedLine: 10,
+			CurrentPath: "example.go",
+			CurrentLine: 10,
+		},
+		{
+			ID:          "decision",
+			Kind:        syntax.Decision,
+			Text:        "SQLite",
+			CreatedPath: "example.go",
+			CreatedLine: 11,
+			CurrentPath: "example.go",
+			CurrentLine: 11,
+		},
+	}
+
+	for _, m := range memories {
+		if err := store.Save(m); err != nil {
+			t.Fatalf("Save() error = %v", err)
+		}
+	}
+
+	got, err := store.List()
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+
+	if len(got) != 3 {
+		t.Fatalf("List() returned %d memories, want 3", len(got))
+	}
+
+	wantIDs := []string{"question", "decision", "reason"}
+
+	for i, want := range wantIDs {
+		if got[i].ID != want {
+			t.Errorf("got[%d].ID = %q, want %q", i, got[i].ID, want)
+		}
+	}
+}

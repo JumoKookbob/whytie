@@ -136,7 +136,7 @@ func (s *SQLiteStore) List() ([]memory.Memory, error) {
 			current_path,
 			current_line
 		FROM memories
-		ORDER BY rowid
+		ORDER BY current_path, current_line, rowid
 	`)
 	if err != nil {
 		return nil, err
