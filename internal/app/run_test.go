@@ -711,7 +711,7 @@ func TestRunVersionCommand(t *testing.T) {
 		t.Fatalf("exitCode = %d, want 0", exitCode)
 	}
 
-	want := "WhyTie v0.1.1\n"
+	want := "WhyTie v0.1.2\n"
 	if stdout.String() != want {
 		t.Errorf("stdout = %q, want %q", stdout.String(), want)
 	}
