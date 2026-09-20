@@ -100,6 +100,32 @@ func Run(args []string, stdout io.Writer, stderr io.Writer, start string) int {
 
 		return 0
 
+	case "resume":
+		if len(args) != 1 {
+			fmt.Fprintln(stderr, "usage: whytie resume")
+			return 1
+		}
+
+		root, err := repository.FindRoot(start)
+		if err != nil {
+			fmt.Fprintf(stderr, "resume failed: %v\n", err)
+			return 1
+		}
+
+		store, err := OpenStore(root)
+		if err != nil {
+			fmt.Fprintf(stderr, "resume failed: %v\n", err)
+			return 1
+		}
+		defer store.Close()
+
+		if err := Resume(stdout, store); err != nil {
+			fmt.Fprintf(stderr, "resume failed: %v\n", err)
+			return 1
+		}
+
+		return 0
+
 	case "list":
 		if err := RunListFrom(stdout, start); err != nil {
 			fmt.Fprintf(stderr, "list failed: %v\n", err)

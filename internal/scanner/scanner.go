@@ -72,6 +72,7 @@ var ignoredDirectories = map[string]struct{}{
 
 type lexicalState struct {
 	inBacktick     bool
+	inGoBlock      bool
 	inPythonTriple bool
 	pythonQuote    string
 }
@@ -130,6 +131,9 @@ func ScanFile(path string) ([]SourceComment, error) {
 
 func shouldIgnoreLineForStrings(line, ext string, state *lexicalState) bool {
 	switch {
+	case ext == ".go":
+		return handleGoStrings(line, state)
+
 	case ext == ".py":
 		return handlePythonStrings(line, state)
 
@@ -361,4 +365,67 @@ func isMinifiedFile(name string) bool {
 	lower := strings.ToLower(name)
 
 	return strings.Contains(lower, ".min.")
+}
+
+func handleGoStrings(line string, state *lexicalState) bool {
+	ignore := state.inBacktick || state.inGoBlock
+	var quote byte
+	escaped := false
+
+	for i := 0; i < len(line); i++ {
+		ch := line[i]
+
+		if state.inBacktick {
+			if ch == '`' {
+				state.inBacktick = false
+			}
+			continue
+		}
+
+		if state.inGoBlock {
+			if ch == '*' && i+1 < len(line) && line[i+1] == '/' {
+				state.inGoBlock = false
+				i++
+			}
+			continue
+		}
+
+		if quote != 0 {
+			if escaped {
+				escaped = false
+				continue
+			}
+			if ch == '\\' {
+				escaped = true
+				continue
+			}
+			if ch == quote {
+				quote = 0
+			}
+			continue
+		}
+
+		if ch == '/' && i+1 < len(line) {
+			switch line[i+1] {
+			case '/':
+				// Backticks and quotes inside a comment are plain text.
+				return ignore
+			case '*':
+				state.inGoBlock = true
+				ignore = true
+				i++
+				continue
+			}
+		}
+
+		switch ch {
+		case '"', '\'':
+			quote = ch
+		case '`':
+			state.inBacktick = true
+			ignore = true
+		}
+	}
+
+	return ignore
 }
