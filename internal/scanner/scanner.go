@@ -1,10 +1,11 @@
 package scanner
 
 import (
-	"go/parser"
-	"go/token"
+	"bufio"
 	"io/fs"
+	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/JumoKookbob/whytie/internal/syntax"
 )
@@ -17,40 +18,272 @@ type SourceComment struct {
 	Line         int
 }
 
-func ScanFile(path string) ([]SourceComment, error) {
-	fset := token.NewFileSet()
+var supportedExtensions = map[string]struct{}{
+	".go":    {},
+	".py":    {},
+	".rs":    {},
+	".c":     {},
+	".h":     {},
+	".cc":    {},
+	".cpp":   {},
+	".cxx":   {},
+	".hpp":   {},
+	".cs":    {},
+	".java":  {},
+	".kt":    {},
+	".kts":   {},
+	".js":    {},
+	".jsx":   {},
+	".mjs":   {},
+	".cjs":   {},
+	".ts":    {},
+	".tsx":   {},
+	".swift": {},
+	".rb":    {},
+	".sh":    {},
+	".bash":  {},
+	".zsh":   {},
+	".ps1":   {},
+	".yaml":  {},
+	".yml":   {},
+	".html":  {},
+	".htm":   {},
+	".css":   {},
+	".scss":  {},
+	".sass":  {},
+	".less":  {},
+}
 
-	file, err := parser.ParseFile(
-		fset,
-		path,
-		nil,
-		parser.ParseComments,
-	)
+var ignoredDirectories = map[string]struct{}{
+	".git":         {},
+	".whytie":      {},
+	"node_modules": {},
+	"vendor":       {},
+	"dist":         {},
+	"build":        {},
+	"target":       {},
+	".idea":        {},
+	".vscode":      {},
+	"__pycache__":  {},
+}
+
+type lexicalState struct {
+	inBacktick     bool
+	inPythonTriple bool
+	pythonQuote    string
+}
+
+func ScanFile(path string) ([]SourceComment, error) {
+	file, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
+	defer file.Close()
 
 	var comments []SourceComment
 
-	for _, group := range file.Comments {
-		for _, comment := range group.List {
-			parsed, ok := syntax.Parse(comment.Text)
-			if !ok {
-				continue
-			}
+	scanner := bufio.NewScanner(file)
+	state := lexicalState{}
+	ext := strings.ToLower(filepath.Ext(path))
+	style := commentStyleForPath(path)
 
-			position := fset.Position(comment.Pos())
+	lineNumber := 0
 
-			comments = append(comments, SourceComment{
-				Kind: parsed.Kind,
-				Text: parsed.Text,
-				File: path,
-				Line: position.Line,
-			})
+	for scanner.Scan() {
+		lineNumber++
+		line := scanner.Text()
+
+		if lineNumber == 1 {
+			line = strings.TrimPrefix(line, "\uFEFF")
 		}
+
+		if shouldIgnoreLineForStrings(line, ext, &state) {
+			continue
+		}
+
+		if !acceptsCommentStyle(line, style) {
+			continue
+		}
+
+		parsed, ok := syntax.Parse(line)
+
+		if !ok {
+			continue
+		}
+
+		comments = append(comments, SourceComment{
+			Kind: parsed.Kind,
+			Text: parsed.Text,
+			File: path,
+			Line: lineNumber,
+		})
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, err
 	}
 
 	return comments, nil
+}
+
+func shouldIgnoreLineForStrings(line, ext string, state *lexicalState) bool {
+	switch {
+	case ext == ".py":
+		return handlePythonStrings(line, state)
+
+	case supportsBacktickStrings(ext):
+		return handleBacktickStrings(line, state)
+
+	default:
+		return false
+	}
+}
+
+func handlePythonStrings(line string, state *lexicalState) bool {
+	if state.inPythonTriple {
+		if containsUnquotedTripleDelimiter(line, state.pythonQuote) {
+			state.inPythonTriple = false
+			state.pythonQuote = ""
+		}
+
+		return true
+	}
+
+	delimiter := findPythonTripleDelimiter(line)
+	if delimiter == "" {
+		return false
+	}
+
+	afterStart := strings.Index(line, delimiter) + len(delimiter)
+	rest := line[afterStart:]
+
+	// 같은 줄에서 닫히는 triple-quoted string.
+	if strings.Contains(rest, delimiter) {
+		return true
+	}
+
+	state.inPythonTriple = true
+	state.pythonQuote = delimiter
+
+	return true
+}
+
+func findPythonTripleDelimiter(line string) string {
+	var quote byte
+	escaped := false
+
+	for i := 0; i < len(line); i++ {
+		ch := line[i]
+
+		if escaped {
+			escaped = false
+			continue
+		}
+
+		if ch == '\\' && quote != 0 {
+			escaped = true
+			continue
+		}
+
+		if quote != 0 {
+			if ch == quote {
+				quote = 0
+			}
+			continue
+		}
+
+		if ch == '"' || ch == '\'' {
+			if i+2 < len(line) &&
+				line[i+1] == ch &&
+				line[i+2] == ch {
+				return line[i : i+3]
+			}
+
+			quote = ch
+		}
+	}
+
+	return ""
+}
+
+func containsUnquotedTripleDelimiter(line, delimiter string) bool {
+	return strings.Contains(line, delimiter)
+}
+
+func handleBacktickStrings(line string, state *lexicalState) bool {
+	if state.inBacktick {
+		if containsBacktickOutsideQuotedString(line) {
+			state.inBacktick = false
+		}
+
+		return true
+	}
+
+	if !containsBacktickOutsideQuotedString(line) {
+		return false
+	}
+
+	// 현재 줄에 실제 multiline delimiter가 존재한다.
+	// WhyTie 주석으로 처리하지 않는다.
+	if countBackticksOutsideQuotedStrings(line)%2 == 1 {
+		state.inBacktick = true
+	}
+
+	return true
+}
+
+func containsBacktickOutsideQuotedString(line string) bool {
+	return countBackticksOutsideQuotedStrings(line) > 0
+}
+
+func countBackticksOutsideQuotedStrings(line string) int {
+	count := 0
+
+	var quote byte
+	escaped := false
+
+	for i := 0; i < len(line); i++ {
+		ch := line[i]
+
+		if escaped {
+			escaped = false
+			continue
+		}
+
+		if ch == '\\' && quote != 0 {
+			escaped = true
+			continue
+		}
+
+		if quote != 0 {
+			if ch == quote {
+				quote = 0
+			}
+			continue
+		}
+
+		switch ch {
+		case '"', '\'':
+			quote = ch
+
+		case '`':
+			count++
+		}
+	}
+
+	return count
+}
+
+func supportsBacktickStrings(ext string) bool {
+	switch ext {
+	case ".go",
+		".js", ".jsx", ".mjs", ".cjs",
+		".ts", ".tsx":
+		return true
+
+	default:
+		return false
+	}
 }
 
 func ScanDir(root string) ([]SourceComment, error) {
@@ -62,17 +295,18 @@ func ScanDir(root string) ([]SourceComment, error) {
 		}
 
 		if entry.IsDir() {
-			switch entry.Name() {
-			case ".git", ".whytie":
-				if path != root {
-					return filepath.SkipDir
-				}
+			if path == root {
+				return nil
+			}
+
+			if shouldIgnoreDirectory(entry.Name()) {
+				return filepath.SkipDir
 			}
 
 			return nil
 		}
 
-		if filepath.Ext(path) != ".go" {
+		if !isSupportedSourceFile(path) {
 			return nil
 		}
 
@@ -91,6 +325,7 @@ func ScanDir(root string) ([]SourceComment, error) {
 		}
 
 		comments = append(comments, fileComments...)
+
 		return nil
 	})
 	if err != nil {
@@ -98,4 +333,18 @@ func ScanDir(root string) ([]SourceComment, error) {
 	}
 
 	return comments, nil
+}
+
+func isSupportedSourceFile(path string) bool {
+	ext := strings.ToLower(filepath.Ext(path))
+
+	_, ok := supportedExtensions[ext]
+
+	return ok
+}
+
+func shouldIgnoreDirectory(name string) bool {
+	_, ok := ignoredDirectories[name]
+
+	return ok
 }

@@ -18,65 +18,100 @@ type Comment struct {
 	Text string
 }
 
+type marker struct {
+	symbol string
+	kind   Kind
+}
+
+var markers = []marker{
+	{"?", Question},
+	{"+", Decision},
+	{"-", Rejected},
+	{"x", Failed},
+	{"<", Reason},
+	{"!", Important},
+}
+
+var commentPrefixes = []struct {
+	open  string
+	close string
+}{
+	{"//", ""},
+	{"#", ""},
+	{"/*", "*/"},
+	{"<!--", "-->"},
+}
+
 func Parse(text string) (Comment, bool) {
 	trimmed := strings.TrimSpace(text)
 
-	if !strings.HasPrefix(trimmed, "//") {
+	body, ok := stripCommentPrefix(trimmed)
+	if !ok {
 		return Comment{}, false
 	}
 
-	content := strings.TrimPrefix(trimmed, "//")
+	return parseMarker(body)
+}
 
-	// Go's gofmt may rewrite comments such as:
-	//
-	//   //+ SQLite
-	//
-	// into:
-	//
-	//   // + SQLite
-	//
-	// WhyTie accepts both forms.
-	if strings.HasPrefix(content, " ") {
-		content = strings.TrimPrefix(content, " ")
-	}
-
-	prefixes := []struct {
-		symbol string
-		kind   Kind
-	}{
-		{"?", Question},
-		{"+", Decision},
-		{"-", Rejected},
-		{"x", Failed},
-		{"<", Reason},
-		{"!", Important},
-	}
-
-	for _, p := range prefixes {
-		if !strings.HasPrefix(content, p.symbol) {
+func stripCommentPrefix(text string) (string, bool) {
+	for _, prefix := range commentPrefixes {
+		if !strings.HasPrefix(text, prefix.open) {
 			continue
 		}
 
-		rest := strings.TrimPrefix(content, p.symbol)
+		body := strings.TrimPrefix(text, prefix.open)
 
-		// Require exactly a WhyTie symbol followed by whitespace.
-		// This rejects things such as:
+		if prefix.close != "" {
+			if !strings.HasSuffix(body, prefix.close) {
+				return "", false
+			}
+
+			body = strings.TrimSuffix(body, prefix.close)
+		}
+
+		body = strings.TrimSpace(body)
+
+		return body, true
+	}
+
+	return "", false
+}
+
+func parseMarker(body string) (Comment, bool) {
+	for _, m := range markers {
+		if !strings.HasPrefix(body, m.symbol) {
+			continue
+		}
+
+		content := strings.TrimPrefix(body, m.symbol)
+
+		// The marker must be followed by whitespace.
 		//
-		//   //++ SQLite
-		//   //?< question
+		// Valid:
+		//   //? question
+		//   // ? question
+		//   #? question
+		//   # ? question
+		//
+		// Invalid:
 		//   //?question
-		if !strings.HasPrefix(rest, " ") {
+		//   #?question
+		if content == "" {
 			return Comment{}, false
 		}
 
-		rest = strings.TrimSpace(rest)
-		if rest == "" {
+		if content[0] != ' ' && content[0] != '\t' {
+			return Comment{}, false
+		}
+
+		content = strings.TrimSpace(content)
+		if content == "" {
 			return Comment{}, false
 		}
 
 		return Comment{
-			Kind: p.kind,
-			Text: rest,
+			Kind: m.kind,
+			Text: content,
 		}, true
 	}
 

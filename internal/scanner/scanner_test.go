@@ -243,3 +243,543 @@ func TestScanDirSkipsInternalDirectories(t *testing.T) {
 		t.Errorf("text = %q, want %q", got.Text, "SQLite")
 	}
 }
+
+func TestScanFilePython(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "example.py")
+
+	source := `# ? 데이터를 어디에 저장할까?
+# + SQLite를 사용한다
+# < local-first로 동작해야 하기 때문이다
+
+def open_database():
+    return "sqlite"
+`
+
+	if err := os.WriteFile(path, []byte(source), 0644); err != nil {
+		t.Fatalf("write test file: %v", err)
+	}
+
+	comments, err := ScanFile(path)
+	if err != nil {
+		t.Fatalf("ScanFile() error = %v", err)
+	}
+
+	if len(comments) != 3 {
+		t.Fatalf("ScanFile() returned %d comments, want 3", len(comments))
+	}
+
+	tests := []struct {
+		kind syntax.Kind
+		text string
+		line int
+	}{
+		{
+			kind: syntax.Question,
+			text: "데이터를 어디에 저장할까?",
+			line: 1,
+		},
+		{
+			kind: syntax.Decision,
+			text: "SQLite를 사용한다",
+			line: 2,
+		},
+		{
+			kind: syntax.Reason,
+			text: "local-first로 동작해야 하기 때문이다",
+			line: 3,
+		},
+	}
+
+	for i, want := range tests {
+		got := comments[i]
+
+		if got.Kind != want.kind {
+			t.Errorf("comment %d kind = %q, want %q", i, got.Kind, want.kind)
+		}
+
+		if got.Text != want.text {
+			t.Errorf("comment %d text = %q, want %q", i, got.Text, want.text)
+		}
+
+		if got.File != path {
+			t.Errorf("comment %d file = %q, want %q", i, got.File, path)
+		}
+
+		if got.Line != want.line {
+			t.Errorf("comment %d line = %d, want %d", i, got.Line, want.line)
+		}
+	}
+}
+
+func TestScanDirMultipleLanguages(t *testing.T) {
+	root := t.TempDir()
+
+	files := map[string]string{
+		"main.go": `package main
+
+// ? Go에서는 어떻게 저장할까?
+// + SQLite를 사용한다
+// < 로컬 저장이 필요하기 때문이다
+
+func main() {}
+`,
+		"worker.py": `# ? Python worker는 어떻게 실행할까?
+# + 별도 프로세스로 실행한다
+# < 장애를 격리하기 위해서다
+
+def run():
+    pass
+`,
+		"engine.rs": `// ? Rust engine은 동기식으로 둘까?
+// - 완전 동기식 구조는 사용하지 않는다
+// < 장시간 작업이 다른 요청을 막기 때문이다
+
+fn main() {}
+`,
+		"client.js": `// ? 재시도 횟수는 몇 번으로 할까?
+// + 세 번으로 제한한다
+// < 무한 재시도를 막기 위해서다
+
+function request() {}
+`,
+		"Server.java": `// ? 서버 종료는 어떻게 처리할까?
+// + graceful shutdown을 사용한다
+// < 진행 중인 요청을 보호하기 위해서다
+
+class Server {}
+`,
+	}
+
+	for name, content := range files {
+		path := filepath.Join(root, name)
+
+		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+
+	comments, err := ScanDir(root)
+	if err != nil {
+		t.Fatalf("ScanDir() error = %v", err)
+	}
+
+	if len(comments) != 15 {
+		t.Fatalf("ScanDir() returned %d comments, want 15", len(comments))
+	}
+
+	wantFiles := map[string]bool{
+		"main.go":     false,
+		"worker.py":   false,
+		"engine.rs":   false,
+		"client.js":   false,
+		"Server.java": false,
+	}
+
+	for _, comment := range comments {
+		if _, ok := wantFiles[comment.RelativePath]; ok {
+			wantFiles[comment.RelativePath] = true
+		}
+	}
+
+	for name, found := range wantFiles {
+		if !found {
+			t.Errorf("no WhyTie comments found for %s", name)
+		}
+	}
+}
+
+func TestScanFileIgnoresMarkersInsideStrings(t *testing.T) {
+	tests := []struct {
+		name     string
+		filename string
+		source   string
+	}{
+		{
+			name:     "go raw string",
+			filename: "main.go",
+			source: `package main
+
+var message = ` + "`" + `
+// ? 이것은 WhyTie 질문이 아니다
+// + 이것도 결정이 아니다
+` + "`" + `
+
+func main() {}
+`,
+		},
+		{
+			name:     "python multiline string",
+			filename: "main.py",
+			source: `message = """
+# ? 이것은 WhyTie 질문이 아니다
+# + 이것도 결정이 아니다
+"""
+
+def main():
+    pass
+`,
+		},
+		{
+			name:     "javascript template literal",
+			filename: "main.js",
+			source:   "const message = `\n// ? 이것은 WhyTie 질문이 아니다\n// + 이것도 결정이 아니다\n`;\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, tt.filename)
+
+			if err := os.WriteFile(path, []byte(tt.source), 0644); err != nil {
+				t.Fatalf("write test file: %v", err)
+			}
+
+			comments, err := ScanFile(path)
+			if err != nil {
+				t.Fatalf("ScanFile() error = %v", err)
+			}
+
+			if len(comments) != 0 {
+				t.Fatalf(
+					"ScanFile() returned %d comments, want 0: %#v",
+					len(comments),
+					comments,
+				)
+			}
+		})
+	}
+}
+
+func TestScanWebLanguages(t *testing.T) {
+	tests := []struct {
+		name     string
+		filename string
+		source   string
+		wantKind syntax.Kind
+		wantText string
+	}{
+		{
+			name:     "html",
+			filename: "index.html",
+			source: `<!doctype html>
+<html>
+<body>
+<!-- ? 로그인 폼을 여기 둘까? -->
+<!-- + 로그인 폼은 메인 페이지에 둔다 -->
+<!-- < 첫 진입 경로를 단순하게 유지하기 위해 -->
+</body>
+</html>
+`,
+			wantKind: syntax.Question,
+			wantText: "로그인 폼을 여기 둘까?",
+		},
+		{
+			name:     "css",
+			filename: "style.css",
+			source: `body {
+    /* ? 최대 너비를 제한할까? */
+    /* + 최대 너비를 1200px로 제한한다 */
+    /* < 초광폭 화면에서 가독성이 떨어지기 때문에 */
+    max-width: 1200px;
+}
+`,
+			wantKind: syntax.Question,
+			wantText: "최대 너비를 제한할까?",
+		},
+		{
+			name:     "javascript",
+			filename: "app.js",
+			source: `// ? API 재시도를 허용할까?
+// + 최대 세 번 재시도한다
+// < 일시적인 네트워크 오류를 복구하기 위해
+
+function request() {}
+`,
+			wantKind: syntax.Question,
+			wantText: "API 재시도를 허용할까?",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, tt.filename)
+
+			if err := os.WriteFile(path, []byte(tt.source), 0644); err != nil {
+				t.Fatalf("write test file: %v", err)
+			}
+
+			comments, err := ScanFile(path)
+			if err != nil {
+				t.Fatalf("ScanFile() error = %v", err)
+			}
+
+			if len(comments) != 3 {
+				t.Fatalf(
+					"ScanFile() returned %d comments, want 3: %#v",
+					len(comments),
+					comments,
+				)
+			}
+
+			if comments[0].Kind != tt.wantKind {
+				t.Errorf(
+					"first comment kind = %q, want %q",
+					comments[0].Kind,
+					tt.wantKind,
+				)
+			}
+
+			if comments[0].Text != tt.wantText {
+				t.Errorf(
+					"first comment text = %q, want %q",
+					comments[0].Text,
+					tt.wantText,
+				)
+			}
+		})
+	}
+}
+
+func TestScanFileUsesLanguageSpecificCommentSyntax(t *testing.T) {
+	tests := []struct {
+		name     string
+		filename string
+		source   string
+		wantText string
+	}{
+		{
+			name:     "go accepts slash comments only",
+			filename: "main.go",
+			source: `package main
+
+// ? 이것은 Go의 올바른 WhyTie 주석이다
+# ? 이것은 Go에서 잡으면 안 된다
+<!-- ? 이것도 잡으면 안 된다 -->
+/* ? 이것도 현재 WhyTie Go 문법으로는 잡지 않는다 */
+`,
+			wantText: "이것은 Go의 올바른 WhyTie 주석이다",
+		},
+		{
+			name:     "python accepts hash comments only",
+			filename: "main.py",
+			source: `# ? 이것은 Python의 올바른 WhyTie 주석이다
+// ? 이것은 Python에서 잡으면 안 된다
+<!-- ? 이것도 잡으면 안 된다 -->
+`,
+			wantText: "이것은 Python의 올바른 WhyTie 주석이다",
+		},
+		{
+			name:     "css accepts block comments only",
+			filename: "style.css",
+			source: `/* ? 이것은 CSS의 올바른 WhyTie 주석이다 */
+// ? 이것은 CSS에서 잡으면 안 된다
+# ? 이것도 잡으면 안 된다
+<!-- ? 이것도 잡으면 안 된다 -->
+`,
+			wantText: "이것은 CSS의 올바른 WhyTie 주석이다",
+		},
+		{
+			name:     "html accepts html comments only",
+			filename: "index.html",
+			source: `<!-- ? 이것은 HTML의 올바른 WhyTie 주석이다 -->
+// ? 이것은 HTML에서 잡으면 안 된다
+# ? 이것도 잡으면 안 된다
+/* ? 이것도 잡으면 안 된다 */
+`,
+			wantText: "이것은 HTML의 올바른 WhyTie 주석이다",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, tt.filename)
+
+			if err := os.WriteFile(path, []byte(tt.source), 0644); err != nil {
+				t.Fatalf("write test file: %v", err)
+			}
+
+			comments, err := ScanFile(path)
+			if err != nil {
+				t.Fatalf("ScanFile() error = %v", err)
+			}
+
+			if len(comments) != 1 {
+				t.Fatalf(
+					"ScanFile() returned %d comments, want 1: %#v",
+					len(comments),
+					comments,
+				)
+			}
+
+			if comments[0].Kind != syntax.Question {
+				t.Errorf(
+					"comment kind = %q, want %q",
+					comments[0].Kind,
+					syntax.Question,
+				)
+			}
+
+			if comments[0].Text != tt.wantText {
+				t.Errorf(
+					"comment text = %q, want %q",
+					comments[0].Text,
+					tt.wantText,
+				)
+			}
+		})
+	}
+}
+
+func TestScanFileDoesNotConfuseStringDelimiterCharacters(t *testing.T) {
+	tests := []struct {
+		name     string
+		filename string
+		source   string
+		wantText string
+	}{
+		{
+			name:     "go quoted backtick",
+			filename: "main.go",
+			source: `package main
+
+var marker = "` + "`" + `"
+
+// ? 실제 질문이다
+`,
+			wantText: "실제 질문이다",
+		},
+		{
+			name:     "javascript quoted backtick",
+			filename: "app.js",
+			source:   "const marker = \"`\";\n\n// ? 실제 질문이다\n",
+			wantText: "실제 질문이다",
+		},
+		{
+			name:     "python triple quote characters in normal string",
+			filename: "main.py",
+			source: `marker = '"""'
+
+# ? 실제 질문이다
+`,
+			wantText: "실제 질문이다",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, tt.filename)
+
+			if err := os.WriteFile(path, []byte(tt.source), 0644); err != nil {
+				t.Fatalf("write test file: %v", err)
+			}
+
+			comments, err := ScanFile(path)
+			if err != nil {
+				t.Fatalf("ScanFile() error = %v", err)
+			}
+
+			if len(comments) != 1 {
+				t.Fatalf(
+					"ScanFile() returned %d comments, want 1: %#v",
+					len(comments),
+					comments,
+				)
+			}
+
+			if comments[0].Kind != syntax.Question {
+				t.Errorf(
+					"comment kind = %q, want %q",
+					comments[0].Kind,
+					syntax.Question,
+				)
+			}
+
+			if comments[0].Text != tt.wantText {
+				t.Errorf(
+					"comment text = %q, want %q",
+					comments[0].Text,
+					tt.wantText,
+				)
+			}
+		})
+	}
+}
+
+func TestScanFileHandlesUTF8BOM(t *testing.T) {
+	tests := []struct {
+		name     string
+		filename string
+		source   string
+	}{
+		{
+			name:     "go",
+			filename: "main.go",
+			source:   "\uFEFF// ? 첫 줄 질문이다\n// + 첫 줄 BOM을 처리한다\n",
+		},
+		{
+			name:     "python",
+			filename: "main.py",
+			source:   "\uFEFF# ? 첫 줄 질문이다\n# + 첫 줄 BOM을 처리한다\n",
+		},
+		{
+			name:     "javascript",
+			filename: "app.js",
+			source:   "\uFEFF// ? 첫 줄 질문이다\n// + 첫 줄 BOM을 처리한다\n",
+		},
+		{
+			name:     "css",
+			filename: "style.css",
+			source:   "\uFEFF/* ? 첫 줄 질문이다 */\n/* + 첫 줄 BOM을 처리한다 */\n",
+		},
+		{
+			name:     "html",
+			filename: "index.html",
+			source:   "\uFEFF<!-- ? 첫 줄 질문이다 -->\n<!-- + 첫 줄 BOM을 처리한다 -->\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, tt.filename)
+
+			if err := os.WriteFile(path, []byte(tt.source), 0644); err != nil {
+				t.Fatalf("write test file: %v", err)
+			}
+
+			comments, err := ScanFile(path)
+			if err != nil {
+				t.Fatalf("ScanFile() error = %v", err)
+			}
+
+			if len(comments) != 2 {
+				t.Fatalf(
+					"ScanFile() returned %d comments, want 2: %#v",
+					len(comments),
+					comments,
+				)
+			}
+
+			if comments[0].Kind != syntax.Question {
+				t.Errorf(
+					"first comment kind = %q, want %q",
+					comments[0].Kind,
+					syntax.Question,
+				)
+			}
+
+			if comments[0].Text != "첫 줄 질문이다" {
+				t.Errorf(
+					"first comment text = %q, want %q",
+					comments[0].Text,
+					"첫 줄 질문이다",
+				)
+			}
+		})
+	}
+}
