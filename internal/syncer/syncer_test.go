@@ -355,3 +355,403 @@ func TestSyncPreservesIdentityAcrossFileMove(t *testing.T) {
 		t.Fatalf("stored CurrentLine = %d, want 42", stored.CurrentLine)
 	}
 }
+
+func TestSyncRecordsCreatedHistory(t *testing.T) {
+	root := t.TempDir()
+
+	if err := os.MkdirAll(filepath.Join(root, ".whytie"), 0755); err != nil {
+		t.Fatalf("MkdirAll(.whytie) error = %v", err)
+	}
+
+	store, err := storage.OpenSQLite(root)
+	if err != nil {
+		t.Fatalf("OpenSQLite() error = %v", err)
+	}
+	defer store.Close()
+
+	sources := []scanner.SourceComment{
+		{
+			Kind:         syntax.Decision,
+			Text:         "SQLite를 사용한다",
+			RelativePath: "internal/storage/db.go",
+			Line:         20,
+		},
+	}
+
+	result, err := Sync(store, sources)
+	if err != nil {
+		t.Fatalf("Sync() error = %v", err)
+	}
+
+	if len(result) != 1 {
+		t.Fatalf("Sync() returned %d memories, want 1", len(result))
+	}
+
+	events, err := store.ListHistory(result[0].ID)
+	if err != nil {
+		t.Fatalf("ListHistory() error = %v", err)
+	}
+
+	if len(events) != 1 {
+		t.Fatalf("history contains %d events, want 1", len(events))
+	}
+
+	event := events[0]
+
+	if event.MemoryID != result[0].ID {
+		t.Errorf("MemoryID = %q, want %q", event.MemoryID, result[0].ID)
+	}
+
+	if event.Type != "created" {
+		t.Errorf("Type = %q, want %q", event.Type, "created")
+	}
+}
+
+func TestSyncDoesNotDuplicateHistoryWhenUnchanged(t *testing.T) {
+	root := t.TempDir()
+
+	if err := os.MkdirAll(filepath.Join(root, ".whytie"), 0755); err != nil {
+		t.Fatalf("MkdirAll(.whytie) error = %v", err)
+	}
+
+	store, err := storage.OpenSQLite(root)
+	if err != nil {
+		t.Fatalf("OpenSQLite() error = %v", err)
+	}
+	defer store.Close()
+
+	sources := []scanner.SourceComment{
+		{
+			Kind:         syntax.Decision,
+			Text:         "SQLite를 사용한다",
+			RelativePath: "internal/storage/db.go",
+			Line:         20,
+		},
+	}
+
+	first, err := Sync(store, sources)
+	if err != nil {
+		t.Fatalf("first Sync() error = %v", err)
+	}
+
+	if len(first) != 1 {
+		t.Fatalf("first Sync() returned %d memories, want 1", len(first))
+	}
+
+	memoryID := first[0].ID
+
+	for i := 0; i < 2; i++ {
+		result, err := Sync(store, sources)
+		if err != nil {
+			t.Fatalf("repeated Sync() %d error = %v", i+1, err)
+		}
+
+		if len(result) != 1 {
+			t.Fatalf(
+				"repeated Sync() %d returned %d memories, want 1",
+				i+1,
+				len(result),
+			)
+		}
+
+		if result[0].ID != memoryID {
+			t.Fatalf(
+				"repeated Sync() %d ID = %q, want %q",
+				i+1,
+				result[0].ID,
+				memoryID,
+			)
+		}
+	}
+
+	events, err := store.ListHistory(memoryID)
+	if err != nil {
+		t.Fatalf("ListHistory() error = %v", err)
+	}
+
+	if len(events) != 1 {
+		t.Fatalf("history contains %d events, want exactly 1", len(events))
+	}
+
+	if events[0].Type != "created" {
+		t.Errorf("event type = %q, want %q", events[0].Type, "created")
+	}
+}
+
+func TestSyncRecordsMovedHistory(t *testing.T) {
+	root := t.TempDir()
+
+	if err := os.MkdirAll(filepath.Join(root, ".whytie"), 0755); err != nil {
+		t.Fatalf("MkdirAll(.whytie) error = %v", err)
+	}
+
+	store, err := storage.OpenSQLite(root)
+	if err != nil {
+		t.Fatalf("OpenSQLite() error = %v", err)
+	}
+	defer store.Close()
+
+	firstSources := []scanner.SourceComment{
+		{
+			Kind:         syntax.Decision,
+			Text:         "SQLite를 사용한다",
+			RelativePath: "old/storage.go",
+			Line:         20,
+		},
+	}
+
+	first, err := Sync(store, firstSources)
+	if err != nil {
+		t.Fatalf("first Sync() error = %v", err)
+	}
+
+	if len(first) != 1 {
+		t.Fatalf("first Sync() returned %d memories, want 1", len(first))
+	}
+
+	memoryID := first[0].ID
+
+	secondSources := []scanner.SourceComment{
+		{
+			Kind:         syntax.Decision,
+			Text:         "SQLite를 사용한다",
+			RelativePath: "internal/storage/db.go",
+			Line:         42,
+		},
+	}
+
+	second, err := Sync(store, secondSources)
+	if err != nil {
+		t.Fatalf("second Sync() error = %v", err)
+	}
+
+	if len(second) != 1 {
+		t.Fatalf("second Sync() returned %d memories, want 1", len(second))
+	}
+
+	if second[0].ID != memoryID {
+		t.Fatalf(
+			"ID after move = %q, want preserved ID %q",
+			second[0].ID,
+			memoryID,
+		)
+	}
+
+	events, err := store.ListHistory(memoryID)
+	if err != nil {
+		t.Fatalf("ListHistory() error = %v", err)
+	}
+
+	if len(events) != 2 {
+		t.Fatalf("history contains %d events, want 2", len(events))
+	}
+
+	if events[0].Type != "created" {
+		t.Errorf("first event type = %q, want %q", events[0].Type, "created")
+	}
+
+	if events[1].Type != "moved" {
+		t.Errorf("second event type = %q, want %q", events[1].Type, "moved")
+	}
+
+	if events[1].Path != "internal/storage/db.go" {
+		t.Errorf(
+			"moved event path = %q, want %q",
+			events[1].Path,
+			"internal/storage/db.go",
+		)
+	}
+
+	if events[1].Line != 42 {
+		t.Errorf("moved event line = %d, want 42", events[1].Line)
+	}
+}
+
+func TestSyncRecordsChangedHistory(t *testing.T) {
+	root := t.TempDir()
+
+	if err := os.MkdirAll(filepath.Join(root, ".whytie"), 0755); err != nil {
+		t.Fatalf("MkdirAll(.whytie) error = %v", err)
+	}
+
+	store, err := storage.OpenSQLite(root)
+	if err != nil {
+		t.Fatalf("OpenSQLite() error = %v", err)
+	}
+	defer store.Close()
+
+	firstSources := []scanner.SourceComment{
+		{
+			Kind:         syntax.Decision,
+			Text:         "SQLite를 사용한다",
+			RelativePath: "internal/storage/db.go",
+			Line:         20,
+		},
+	}
+
+	first, err := Sync(store, firstSources)
+	if err != nil {
+		t.Fatalf("first Sync() error = %v", err)
+	}
+
+	if len(first) != 1 {
+		t.Fatalf("first Sync() returned %d memories, want 1", len(first))
+	}
+
+	memoryID := first[0].ID
+
+	secondSources := []scanner.SourceComment{
+		{
+			Kind:         syntax.Decision,
+			Text:         "SQLite를 기본 저장소로 사용한다",
+			RelativePath: "internal/storage/db.go",
+			Line:         20,
+		},
+	}
+
+	second, err := Sync(store, secondSources)
+	if err != nil {
+		t.Fatalf("second Sync() error = %v", err)
+	}
+
+	if len(second) != 1 {
+		t.Fatalf("second Sync() returned %d memories, want 1", len(second))
+	}
+
+	if second[0].ID != memoryID {
+		t.Fatalf(
+			"ID after change = %q, want preserved ID %q",
+			second[0].ID,
+			memoryID,
+		)
+	}
+
+	if second[0].Text != "SQLite를 기본 저장소로 사용한다" {
+		t.Errorf(
+			"Text after change = %q, want %q",
+			second[0].Text,
+			"SQLite를 기본 저장소로 사용한다",
+		)
+	}
+
+	events, err := store.ListHistory(memoryID)
+	if err != nil {
+		t.Fatalf("ListHistory() error = %v", err)
+	}
+
+	if len(events) != 2 {
+		t.Fatalf("history contains %d events, want 2", len(events))
+	}
+
+	if events[0].Type != "created" {
+		t.Errorf(
+			"first event type = %q, want %q",
+			events[0].Type,
+			"created",
+		)
+	}
+
+	if events[1].Type != "changed" {
+		t.Errorf(
+			"second event type = %q, want %q",
+			events[1].Type,
+			"changed",
+		)
+	}
+
+	if events[1].Path != "internal/storage/db.go" {
+		t.Errorf(
+			"changed event path = %q, want %q",
+			events[1].Path,
+			"internal/storage/db.go",
+		)
+	}
+
+	if events[1].Line != 20 {
+		t.Errorf(
+			"changed event line = %d, want 20",
+			events[1].Line,
+		)
+	}
+}
+
+func TestSyncWithProvenanceRecordsCommitHash(t *testing.T) {
+	root := t.TempDir()
+
+	if err := os.MkdirAll(filepath.Join(root, ".whytie"), 0755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+
+	store, err := storage.OpenSQLite(root)
+	if err != nil {
+		t.Fatalf("OpenSQLite() error = %v", err)
+	}
+	defer store.Close()
+
+	sources := []scanner.SourceComment{
+		{
+			Kind:         syntax.Kind("decision"),
+			Text:         "SQLite를 사용한다",
+			RelativePath: "main.go",
+			Line:         10,
+		},
+	}
+
+	provenance := func(path string, line int) string {
+		if path != "main.go" {
+			t.Fatalf(
+				"provenance path = %q, want %q",
+				path,
+				"main.go",
+			)
+		}
+
+		if line != 10 {
+			t.Fatalf(
+				"provenance line = %d, want 10",
+				line,
+			)
+		}
+
+		return "abc123"
+	}
+
+	memories, err := SyncWithProvenance(
+		store,
+		sources,
+		provenance,
+	)
+	if err != nil {
+		t.Fatalf(
+			"SyncWithProvenance() error = %v",
+			err,
+		)
+	}
+
+	if len(memories) != 1 {
+		t.Fatalf(
+			"SyncWithProvenance() returned %d memories, want 1",
+			len(memories),
+		)
+	}
+
+	events, err := store.ListHistory(memories[0].ID)
+	if err != nil {
+		t.Fatalf("ListHistory() error = %v", err)
+	}
+
+	if len(events) != 1 {
+		t.Fatalf(
+			"ListHistory() returned %d events, want 1",
+			len(events),
+		)
+	}
+
+	if events[0].CommitHash != "abc123" {
+		t.Fatalf(
+			"history CommitHash = %q, want %q",
+			events[0].CommitHash,
+			"abc123",
+		)
+	}
+}

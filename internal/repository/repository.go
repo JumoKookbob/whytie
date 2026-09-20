@@ -27,7 +27,23 @@ func Init(root string) error {
 		return err
 	}
 
-	return os.Mkdir(dir, 0755)
+	if err := os.Mkdir(dir, 0755); err != nil {
+		return err
+	}
+
+	gitignorePath := filepath.Join(dir, ".gitignore")
+
+	const gitignore = "*\n!.gitignore\n"
+
+	if err := os.WriteFile(
+		gitignorePath,
+		[]byte(gitignore),
+		0644,
+	); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func FindRoot(start string) (string, error) {

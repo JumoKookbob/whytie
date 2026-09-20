@@ -3,7 +3,9 @@ package storage
 import (
 	"database/sql"
 	"path/filepath"
+	"time"
 
+	"github.com/JumoKookbob/whytie/internal/history"
 	"github.com/JumoKookbob/whytie/internal/memory"
 	"github.com/JumoKookbob/whytie/internal/syntax"
 	_ "modernc.org/sqlite"
@@ -37,6 +39,19 @@ func OpenSQLite(root string) (*SQLiteStore, error) {
 		current_path TEXT NOT NULL,
 		current_line INTEGER NOT NULL
 	);
+
+	CREATE TABLE IF NOT EXISTS history_events (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		memory_id TEXT NOT NULL,
+		event_type TEXT NOT NULL,
+		path TEXT NOT NULL,
+		line INTEGER NOT NULL,
+		commit_hash TEXT NOT NULL,
+		occurred_at TEXT NOT NULL
+	);
+
+	CREATE INDEX IF NOT EXISTS idx_history_events_memory_id
+	ON history_events(memory_id);
 	`
 
 	if _, err := db.Exec(schema); err != nil {
@@ -170,4 +185,80 @@ func (s *SQLiteStore) List() ([]memory.Memory, error) {
 	}
 
 	return memories, nil
+}
+
+func (s *SQLiteStore) SaveHistory(event history.Event) error {
+	_, err := s.db.Exec(`
+		INSERT INTO history_events (
+			memory_id,
+			event_type,
+			path,
+			line,
+			commit_hash,
+			occurred_at
+		)
+		VALUES (?, ?, ?, ?, ?, ?)
+	`,
+		event.MemoryID,
+		string(event.Type),
+		event.Path,
+		event.Line,
+		event.CommitHash,
+		event.OccurredAt.UTC().Format(time.RFC3339Nano),
+	)
+
+	return err
+}
+
+func (s *SQLiteStore) ListHistory(memoryID string) ([]history.Event, error) {
+	rows, err := s.db.Query(`
+		SELECT
+			memory_id,
+			event_type,
+			path,
+			line,
+			commit_hash,
+			occurred_at
+		FROM history_events
+		WHERE memory_id = ?
+		ORDER BY id
+	`, memoryID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var events []history.Event
+
+	for rows.Next() {
+		var event history.Event
+		var eventType string
+		var occurredAt string
+
+		if err := rows.Scan(
+			&event.MemoryID,
+			&eventType,
+			&event.Path,
+			&event.Line,
+			&event.CommitHash,
+			&occurredAt,
+		); err != nil {
+			return nil, err
+		}
+
+		event.Type = history.EventType(eventType)
+
+		event.OccurredAt, err = time.Parse(time.RFC3339Nano, occurredAt)
+		if err != nil {
+			return nil, err
+		}
+
+		events = append(events, event)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return events, nil
 }

@@ -4,6 +4,7 @@ import (
 	"io"
 
 	"github.com/JumoKookbob/whytie/internal/formatter"
+	"github.com/JumoKookbob/whytie/internal/gitinfo"
 	"github.com/JumoKookbob/whytie/internal/reasoning"
 	"github.com/JumoKookbob/whytie/internal/scanner"
 	"github.com/JumoKookbob/whytie/internal/storage"
@@ -16,7 +17,24 @@ func Scan(w io.Writer, store storage.Store, path string) error {
 		return err
 	}
 
-	if _, err := syncer.Sync(store, comments); err != nil {
+	// History records the repository state in which a reasoning event
+	// was observed. This is intentionally the current HEAD commit rather
+	// than git blame provenance for an individual source line.
+	commitHash := ""
+
+	if info, err := gitinfo.Current(path); err == nil {
+		commitHash = info.CommitHash
+	}
+
+	provenance := func(_ string, _ int) string {
+		return commitHash
+	}
+
+	if _, err := syncer.SyncWithProvenance(
+		store,
+		comments,
+		provenance,
+	); err != nil {
 		return err
 	}
 

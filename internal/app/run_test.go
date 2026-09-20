@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/JumoKookbob/whytie/internal/history"
 	"github.com/JumoKookbob/whytie/internal/memory"
 	"github.com/JumoKookbob/whytie/internal/syntax"
 )
@@ -718,5 +720,184 @@ func TestRunVersionCommand(t *testing.T) {
 
 	if stderr.String() != "" {
 		t.Errorf("stderr = %q, want empty", stderr.String())
+	}
+}
+
+func TestRunHistoryCommand(t *testing.T) {
+	root := t.TempDir()
+
+	if err := Init(root); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	store, err := OpenStore(root)
+	if err != nil {
+		t.Fatalf("OpenStore() error = %v", err)
+	}
+
+	target := memory.Memory{
+		ID:          "history-decision",
+		Kind:        syntax.Decision,
+		Text:        "SQLite를 사용한다",
+		CreatedPath: "example.go",
+		CreatedLine: 10,
+		CurrentPath: "internal/storage/db.go",
+		CurrentLine: 24,
+	}
+
+	if err := store.Save(target); err != nil {
+		store.Close()
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	if err := store.SaveHistory(history.Event{
+		MemoryID:   target.ID,
+		Type:       history.EventCreated,
+		Path:       "example.go",
+		Line:       10,
+		CommitHash: "1234567890abcdef",
+	}); err != nil {
+		store.Close()
+		t.Fatalf("SaveHistory(created) error = %v", err)
+	}
+
+	if err := store.SaveHistory(history.Event{
+		MemoryID:   target.ID,
+		Type:       history.EventMoved,
+		Path:       "internal/storage/db.go",
+		Line:       24,
+		CommitHash: "abcdef1234567890",
+	}); err != nil {
+		store.Close()
+		t.Fatalf("SaveHistory(moved) error = %v", err)
+	}
+
+	if err := store.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	exitCode := Run(
+		[]string{"history", target.ID},
+		&stdout,
+		&stderr,
+		root,
+	)
+
+	if exitCode != 0 {
+		t.Fatalf(
+			"Run() exit code = %d, want 0\nstderr:\n%s",
+			exitCode,
+			stderr.String(),
+		)
+	}
+
+	wants := []string{
+		"decision: SQLite를 사용한다",
+		"internal/storage/db.go:24",
+		"created",
+		"example.go:10",
+		"commit 1234567",
+		"moved",
+		"commit abcdef1",
+	}
+
+	for _, want := range wants {
+		if !strings.Contains(stdout.String(), want) {
+			t.Errorf(
+				"Run() stdout does not contain %q\nstdout:\n%s",
+				want,
+				stdout.String(),
+			)
+		}
+	}
+
+	if stderr.Len() != 0 {
+		t.Errorf("Run() stderr = %q, want empty", stderr.String())
+	}
+}
+
+func TestRunHistoryCommandAcceptsLocation(t *testing.T) {
+	root := t.TempDir()
+
+	if err := Init(root); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	store, err := OpenStore(root)
+	if err != nil {
+		t.Fatalf("OpenStore() error = %v", err)
+	}
+
+	target := memory.Memory{
+		ID:          "history-location",
+		Kind:        syntax.Decision,
+		Text:        "SQLite를 사용한다",
+		CreatedPath: "example.go",
+		CreatedLine: 10,
+		CurrentPath: "example.go",
+		CurrentLine: 10,
+	}
+
+	if err := store.Save(target); err != nil {
+		store.Close()
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	if err := store.SaveHistory(history.Event{
+		MemoryID:   target.ID,
+		Type:       history.EventCreated,
+		Path:       "example.go",
+		Line:       10,
+		CommitHash: "1234567890abcdef",
+	}); err != nil {
+		store.Close()
+		t.Fatalf("SaveHistory() error = %v", err)
+	}
+
+	if err := store.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	exitCode := Run(
+		[]string{"history", "example.go:10"},
+		&stdout,
+		&stderr,
+		root,
+	)
+
+	if exitCode != 0 {
+		t.Fatalf(
+			"Run() exit code = %d, want 0\nstderr:\n%s",
+			exitCode,
+			stderr.String(),
+		)
+	}
+
+	wants := []string{
+		"decision: SQLite를 사용한다",
+		"example.go:10",
+		"history:",
+		"created",
+		"commit 1234567",
+	}
+
+	for _, want := range wants {
+		if !strings.Contains(stdout.String(), want) {
+			t.Errorf(
+				"Run() stdout does not contain %q\nstdout:\n%s",
+				want,
+				stdout.String(),
+			)
+		}
+	}
+
+	if stderr.Len() != 0 {
+		t.Errorf("Run() stderr = %q, want empty", stderr.String())
 	}
 }

@@ -86,3 +86,28 @@ func TestFindRootRejectsDirectoryOutsideRepository(t *testing.T) {
 		)
 	}
 }
+
+func TestInitCreatesInternalGitIgnore(t *testing.T) {
+	root := t.TempDir()
+
+	if err := Init(root); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	path := filepath.Join(root, ".whytie", ".gitignore")
+
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%q) error = %v", path, err)
+	}
+
+	want := "*\n!.gitignore\n"
+
+	if string(content) != want {
+		t.Errorf(
+			".whytie/.gitignore = %q, want %q",
+			string(content),
+			want,
+		)
+	}
+}

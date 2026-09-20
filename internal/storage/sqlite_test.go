@@ -4,7 +4,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
+	"github.com/JumoKookbob/whytie/internal/history"
 	"github.com/JumoKookbob/whytie/internal/memory"
 	"github.com/JumoKookbob/whytie/internal/repository"
 	"github.com/JumoKookbob/whytie/internal/syntax"
@@ -422,5 +424,154 @@ func TestSQLiteStoreListOrdersByCurrentSourceLocation(t *testing.T) {
 		if got[i].ID != want {
 			t.Errorf("got[%d].ID = %q, want %q", i, got[i].ID, want)
 		}
+	}
+}
+
+func TestSQLiteHistoryPersistsAcrossReopen(t *testing.T) {
+	root := t.TempDir()
+
+	if err := os.MkdirAll(filepath.Join(root, ".whytie"), 0755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+
+	store, err := OpenSQLite(root)
+	if err != nil {
+		t.Fatalf("OpenSQLite() error = %v", err)
+	}
+
+	baseTime := time.Date(
+		2026,
+		time.September,
+		20,
+		10,
+		0,
+		0,
+		0,
+		time.UTC,
+	)
+
+	events := []history.Event{
+		{
+			MemoryID:   "memory-123",
+			Type:       history.EventCreated,
+			Path:       "main.go",
+			Line:       10,
+			CommitHash: "commit-a",
+			OccurredAt: baseTime,
+		},
+		{
+			MemoryID:   "memory-123",
+			Type:       history.EventMoved,
+			Path:       filepath.Join("internal", "storage", "db.go"),
+			Line:       42,
+			CommitHash: "commit-b",
+			OccurredAt: baseTime.Add(time.Hour),
+		},
+		{
+			MemoryID:   "memory-123",
+			Type:       history.EventChanged,
+			Path:       filepath.Join("internal", "storage", "db.go"),
+			Line:       51,
+			CommitHash: "commit-c",
+			OccurredAt: baseTime.Add(2 * time.Hour),
+		},
+	}
+
+	for _, event := range events {
+		if err := store.SaveHistory(event); err != nil {
+			store.Close()
+			t.Fatalf("SaveHistory() error = %v", err)
+		}
+	}
+
+	if err := store.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+
+	store, err = OpenSQLite(root)
+	if err != nil {
+		t.Fatalf("reopen OpenSQLite() error = %v", err)
+	}
+	defer store.Close()
+
+	got, err := store.ListHistory("memory-123")
+	if err != nil {
+		t.Fatalf("ListHistory() error = %v", err)
+	}
+
+	if len(got) != 3 {
+		t.Fatalf("ListHistory() returned %d events, want 3", len(got))
+	}
+
+	wantTypes := []history.EventType{
+		history.EventCreated,
+		history.EventMoved,
+		history.EventChanged,
+	}
+
+	for i := range got {
+		if got[i].MemoryID != "memory-123" {
+			t.Fatalf(
+				"event %d MemoryID = %q, want %q",
+				i,
+				got[i].MemoryID,
+				"memory-123",
+			)
+		}
+
+		if got[i].Type != wantTypes[i] {
+			t.Fatalf(
+				"event %d Type = %q, want %q",
+				i,
+				got[i].Type,
+				wantTypes[i],
+			)
+		}
+
+		if got[i].CommitHash != events[i].CommitHash {
+			t.Fatalf(
+				"event %d CommitHash = %q, want %q",
+				i,
+				got[i].CommitHash,
+				events[i].CommitHash,
+			)
+		}
+
+		if !got[i].OccurredAt.Equal(events[i].OccurredAt) {
+			t.Fatalf(
+				"event %d OccurredAt = %v, want %v",
+				i,
+				got[i].OccurredAt,
+				events[i].OccurredAt,
+			)
+		}
+	}
+
+	if got[0].Path != "main.go" || got[0].Line != 10 {
+		t.Fatalf(
+			"created location = %s:%d, want main.go:10",
+			got[0].Path,
+			got[0].Line,
+		)
+	}
+
+	wantMovedPath := filepath.Join("internal", "storage", "db.go")
+
+	if got[1].Path != wantMovedPath || got[1].Line != 42 {
+		t.Fatalf(
+			"moved location = %s:%d, want %s:42",
+			got[1].Path,
+			got[1].Line,
+			wantMovedPath,
+		)
+	}
+
+	if got[2].Path != wantMovedPath || got[2].Line != 51 {
+		t.Fatalf(
+			"changed location = %s:%d, want %s:51",
+			got[2].Path,
+			got[2].Line,
+			wantMovedPath,
+		)
 	}
 }
