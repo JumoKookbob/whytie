@@ -783,3 +783,183 @@ func TestScanFileHandlesUTF8BOM(t *testing.T) {
 		})
 	}
 }
+
+func TestScanDirSkipsCommonGeneratedDirectories(t *testing.T) {
+	root := t.TempDir()
+
+	files := map[string]string{
+		"main.go": `
+// ? 이것은 읽어야 한다
+package main
+`,
+		filepath.Join("src", "app.go"): `
+// + 이것도 읽어야 한다
+package src
+`,
+
+		filepath.Join(".git", "fake.go"): `
+// ? git 내부는 읽으면 안 된다
+`,
+		filepath.Join(".whytie", "fake.go"): `
+// ? whytie 내부는 읽으면 안 된다
+`,
+		filepath.Join("node_modules", "package.js"): `
+// ? node_modules는 읽으면 안 된다
+`,
+		filepath.Join("vendor", "dependency.go"): `
+// ? vendor는 읽으면 안 된다
+`,
+		filepath.Join("dist", "bundle.js"): `
+// ? dist는 읽으면 안 된다
+`,
+		filepath.Join("build", "generated.go"): `
+// ? build는 읽으면 안 된다
+`,
+	}
+
+	for relativePath, content := range files {
+		path := filepath.Join(root, relativePath)
+
+		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+			t.Fatalf("MkdirAll(%q): %v", path, err)
+		}
+
+		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+			t.Fatalf("WriteFile(%q): %v", path, err)
+		}
+	}
+
+	comments, err := ScanDir(root)
+	if err != nil {
+		t.Fatalf("ScanDir() error = %v", err)
+	}
+
+	if len(comments) != 2 {
+		t.Fatalf(
+			"ScanDir() returned %d comments, want 2: %#v",
+			len(comments),
+			comments,
+		)
+	}
+
+	for _, comment := range comments {
+		switch filepath.ToSlash(comment.RelativePath) {
+		case "main.go", "src/app.go":
+			// expected
+		default:
+			t.Errorf(
+				"ScanDir() unexpectedly scanned %q",
+				comment.RelativePath,
+			)
+		}
+	}
+}
+
+func TestScanDirSkipsLanguageGeneratedDirectories(t *testing.T) {
+	root := t.TempDir()
+
+	files := map[string]string{
+		"src/main.rs": `
+// ? 실제 Rust 코드는 읽어야 한다
+fn main() {}
+`,
+		"app/main.py": `
+# ? 실제 Python 코드는 읽어야 한다
+`,
+		"web/app.js": `
+// ? 실제 JavaScript 코드는 읽어야 한다
+`,
+
+		filepath.Join("target", "generated.rs"): `
+// ? Rust target은 읽으면 안 된다
+`,
+		filepath.Join("__pycache__", "fake.py"): `
+# ? Python cache는 읽으면 안 된다
+`,
+		filepath.Join(".pytest_cache", "fake.py"): `
+# ? pytest cache는 읽으면 안 된다
+`,
+		filepath.Join("coverage", "fake.js"): `
+// ? coverage는 읽으면 안 된다
+`,
+		filepath.Join(".next", "fake.js"): `
+// ? Next.js build output은 읽으면 안 된다
+`,
+	}
+
+	for relativePath, content := range files {
+		path := filepath.Join(root, relativePath)
+
+		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+			t.Fatalf("MkdirAll(%q): %v", path, err)
+		}
+
+		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+			t.Fatalf("WriteFile(%q): %v", path, err)
+		}
+	}
+
+	comments, err := ScanDir(root)
+	if err != nil {
+		t.Fatalf("ScanDir() error = %v", err)
+	}
+
+	if len(comments) != 3 {
+		t.Fatalf(
+			"ScanDir() returned %d comments, want 3: %#v",
+			len(comments),
+			comments,
+		)
+	}
+
+	for _, comment := range comments {
+		switch filepath.ToSlash(comment.RelativePath) {
+		case "src/main.rs", "app/main.py", "web/app.js":
+			// expected
+		default:
+			t.Errorf(
+				"ScanDir() unexpectedly scanned %q",
+				comment.RelativePath,
+			)
+		}
+	}
+}
+
+func TestScanDirSkipsUnsupportedFiles(t *testing.T) {
+	dir := t.TempDir()
+
+	files := map[string]string{
+		"main.go": `package main
+
+// ? 실제 소스 파일은 읽어야 한다
+func main() {}
+`,
+		"notes.txt": `// ? 일반 텍스트 파일은 소스 코드가 아니다
+`,
+		"data.json": `{
+	"message": "// ? JSON 문자열도 읽으면 안 된다"
+}`,
+		"bundle.min.js": `// ? minified 파일은 읽으면 안 된다`,
+	}
+
+	for name, content := range files {
+		path := filepath.Join(dir, name)
+
+		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+			t.Fatalf("WriteFile(%q) error = %v", name, err)
+		}
+	}
+
+	comments, err := ScanDir(dir)
+	if err != nil {
+		t.Fatalf("ScanDir() error = %v", err)
+	}
+
+	if len(comments) != 1 {
+		t.Fatalf("ScanDir() returned %d comments, want 1: %#v", len(comments), comments)
+	}
+
+	if comments[0].Text != "실제 소스 파일은 읽어야 한다" {
+		t.Fatalf("unexpected comment: %#v", comments[0])
+	}
+}

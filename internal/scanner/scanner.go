@@ -55,16 +55,19 @@ var supportedExtensions = map[string]struct{}{
 }
 
 var ignoredDirectories = map[string]struct{}{
-	".git":         {},
-	".whytie":      {},
-	"node_modules": {},
-	"vendor":       {},
-	"dist":         {},
-	"build":        {},
-	"target":       {},
-	".idea":        {},
-	".vscode":      {},
-	"__pycache__":  {},
+	".git":          {},
+	".whytie":       {},
+	"node_modules":  {},
+	"vendor":        {},
+	"dist":          {},
+	"build":         {},
+	"target":        {},
+	".idea":         {},
+	".vscode":       {},
+	"__pycache__":   {},
+	".pytest_cache": {},
+	".next":         {},
+	"coverage":      {},
 }
 
 type lexicalState struct {
@@ -106,7 +109,6 @@ func ScanFile(path string) ([]SourceComment, error) {
 		}
 
 		parsed, ok := syntax.Parse(line)
-
 		if !ok {
 			continue
 		}
@@ -310,6 +312,12 @@ func ScanDir(root string) ([]SourceComment, error) {
 			return nil
 		}
 
+		// Minified/generated source files such as bundle.min.js should not
+		// contribute WhyTie reasoning.
+		if isMinifiedFile(entry.Name()) {
+			return nil
+		}
+
 		fileComments, err := ScanFile(path)
 		if err != nil {
 			return err
@@ -347,4 +355,10 @@ func shouldIgnoreDirectory(name string) bool {
 	_, ok := ignoredDirectories[name]
 
 	return ok
+}
+
+func isMinifiedFile(name string) bool {
+	lower := strings.ToLower(name)
+
+	return strings.Contains(lower, ".min.")
 }
