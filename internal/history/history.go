@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/JumoKookbob/whytie/internal/memory"
+	"github.com/JumoKookbob/whytie/internal/syntax"
 )
 
 type EventType string
@@ -12,11 +13,15 @@ const (
 	EventCreated EventType = "created"
 	EventMoved   EventType = "moved"
 	EventChanged EventType = "changed"
+	EventDeleted EventType = "deleted"
 )
 
 type Event struct {
 	MemoryID string
 	Type     EventType
+
+	Kind syntax.Kind
+	Text string
 
 	Path string
 	Line int

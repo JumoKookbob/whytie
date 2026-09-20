@@ -15,4 +15,5 @@ type Store interface {
 type HistoryStore interface {
 	SaveHistory(history.Event) error
 	ListHistory(memoryID string) ([]history.Event, error)
+	FindHistoryAt(path string, line int) (history.Event, bool, error)
 }

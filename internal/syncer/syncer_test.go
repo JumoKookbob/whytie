@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/JumoKookbob/whytie/internal/history"
 	"github.com/JumoKookbob/whytie/internal/memory"
 	"github.com/JumoKookbob/whytie/internal/scanner"
 	"github.com/JumoKookbob/whytie/internal/storage"
@@ -753,5 +754,107 @@ func TestSyncWithProvenanceRecordsCommitHash(t *testing.T) {
 			events[0].CommitHash,
 			"abc123",
 		)
+	}
+}
+
+func TestSyncRecordsDeletedHistory(t *testing.T) {
+	root := t.TempDir()
+
+	if err := os.MkdirAll(filepath.Join(root, ".whytie"), 0755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+
+	store, err := storage.OpenSQLite(root)
+	if err != nil {
+		t.Fatalf("OpenSQLite() error = %v", err)
+	}
+	defer store.Close()
+
+	source := scanner.SourceComment{
+		Kind:         syntax.Decision,
+		Text:         "SQLite를 사용한다",
+		File:         "example.go",
+		RelativePath: "example.go",
+		Line:         10,
+	}
+
+	memories, err := Sync(store, []scanner.SourceComment{source})
+	if err != nil {
+		t.Fatalf("first Sync() error = %v", err)
+	}
+
+	if len(memories) != 1 {
+		t.Fatalf("first Sync() returned %d memories, want 1", len(memories))
+	}
+
+	memoryID := memories[0].ID
+
+	if _, err := Sync(store, nil); err != nil {
+		t.Fatalf("second Sync() error = %v", err)
+	}
+
+	events, err := store.ListHistory(memoryID)
+	if err != nil {
+		t.Fatalf("ListHistory() error = %v", err)
+	}
+
+	if len(events) != 2 {
+		t.Fatalf("history contains %d events, want 2", len(events))
+	}
+
+	if events[0].Type != history.EventCreated {
+		t.Errorf(
+			"first event type = %q, want %q",
+			events[0].Type,
+			history.EventCreated,
+		)
+	}
+
+	if events[1].Type != history.EventDeleted {
+		t.Errorf(
+			"second event type = %q, want %q",
+			events[1].Type,
+			history.EventDeleted,
+		)
+	}
+
+	if events[1].Path != "example.go" {
+		t.Errorf(
+			"deleted event path = %q, want %q",
+			events[1].Path,
+			"example.go",
+		)
+	}
+
+	if events[1].Line != 10 {
+		t.Errorf(
+			"deleted event line = %d, want %d",
+			events[1].Line,
+			10,
+		)
+	}
+	if events[1].Kind != syntax.Decision {
+		t.Errorf(
+			"deleted event kind = %q, want %q",
+			events[1].Kind,
+			syntax.Decision,
+		)
+	}
+
+	if events[1].Text != "SQLite를 사용한다" {
+		t.Errorf(
+			"deleted event text = %q, want %q",
+			events[1].Text,
+			"SQLite를 사용한다",
+		)
+	}
+
+	active, err := store.List()
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+
+	if len(active) != 0 {
+		t.Errorf("active memories = %d, want 0", len(active))
 	}
 }

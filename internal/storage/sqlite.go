@@ -41,13 +41,15 @@ func OpenSQLite(root string) (*SQLiteStore, error) {
 	);
 
 	CREATE TABLE IF NOT EXISTS history_events (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		memory_id TEXT NOT NULL,
-		event_type TEXT NOT NULL,
-		path TEXT NOT NULL,
-		line INTEGER NOT NULL,
-		commit_hash TEXT NOT NULL,
-		occurred_at TEXT NOT NULL
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        memory_id TEXT NOT NULL,
+        event_type TEXT NOT NULL,
+        kind TEXT NOT NULL DEFAULT '',
+        text TEXT NOT NULL DEFAULT '',
+        path TEXT NOT NULL,
+        line INTEGER NOT NULL,
+        commit_hash TEXT NOT NULL,
+        occurred_at TEXT NOT NULL
 	);
 
 	CREATE INDEX IF NOT EXISTS idx_history_events_memory_id
@@ -58,9 +60,80 @@ func OpenSQLite(root string) (*SQLiteStore, error) {
 		db.Close()
 		return nil, err
 	}
+
+	if err := ensureHistorySnapshotColumns(db); err != nil {
+		db.Close()
+		return nil, err
+	}
+
 	return &SQLiteStore{
 		db: db,
 	}, nil
+}
+
+func ensureHistorySnapshotColumns(db *sql.DB) error {
+	columns, err := historyEventColumns(db)
+	if err != nil {
+		return err
+	}
+
+	if !columns["kind"] {
+		if _, err := db.Exec(`
+                        ALTER TABLE history_events
+                        ADD COLUMN kind TEXT NOT NULL DEFAULT ''
+                `); err != nil {
+			return err
+		}
+	}
+
+	if !columns["text"] {
+		if _, err := db.Exec(`
+                        ALTER TABLE history_events
+                        ADD COLUMN text TEXT NOT NULL DEFAULT ''
+                `); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func historyEventColumns(db *sql.DB) (map[string]bool, error) {
+	rows, err := db.Query(`PRAGMA table_info(history_events)`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	columns := make(map[string]bool)
+
+	for rows.Next() {
+		var cid int
+		var name string
+		var columnType string
+		var notNull int
+		var defaultValue any
+		var primaryKey int
+
+		if err := rows.Scan(
+			&cid,
+			&name,
+			&columnType,
+			&notNull,
+			&defaultValue,
+			&primaryKey,
+		); err != nil {
+			return nil, err
+		}
+
+		columns[name] = true
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return columns, nil
 }
 
 func (s *SQLiteStore) Close() error {
@@ -189,18 +262,22 @@ func (s *SQLiteStore) List() ([]memory.Memory, error) {
 
 func (s *SQLiteStore) SaveHistory(event history.Event) error {
 	_, err := s.db.Exec(`
-		INSERT INTO history_events (
-			memory_id,
-			event_type,
-			path,
-			line,
-			commit_hash,
-			occurred_at
-		)
-		VALUES (?, ?, ?, ?, ?, ?)
-	`,
+                INSERT INTO history_events (
+                        memory_id,
+                        event_type,
+                        kind,
+                        text,
+                        path,
+                        line,
+                        commit_hash,
+                        occurred_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `,
 		event.MemoryID,
 		string(event.Type),
+		string(event.Kind),
+		event.Text,
 		event.Path,
 		event.Line,
 		event.CommitHash,
@@ -215,6 +292,8 @@ func (s *SQLiteStore) ListHistory(memoryID string) ([]history.Event, error) {
 		SELECT
 			memory_id,
 			event_type,
+			kind,
+        	text,
 			path,
 			line,
 			commit_hash,
@@ -233,11 +312,14 @@ func (s *SQLiteStore) ListHistory(memoryID string) ([]history.Event, error) {
 	for rows.Next() {
 		var event history.Event
 		var eventType string
+		var kind string
 		var occurredAt string
 
 		if err := rows.Scan(
 			&event.MemoryID,
 			&eventType,
+			&kind,
+			&event.Text,
 			&event.Path,
 			&event.Line,
 			&event.CommitHash,
@@ -247,6 +329,7 @@ func (s *SQLiteStore) ListHistory(memoryID string) ([]history.Event, error) {
 		}
 
 		event.Type = history.EventType(eventType)
+		event.Kind = syntax.Kind(kind)
 
 		event.OccurredAt, err = time.Parse(time.RFC3339Nano, occurredAt)
 		if err != nil {
@@ -261,4 +344,60 @@ func (s *SQLiteStore) ListHistory(memoryID string) ([]history.Event, error) {
 	}
 
 	return events, nil
+}
+
+func (s *SQLiteStore) FindHistoryAt(
+	path string,
+	line int,
+) (history.Event, bool, error) {
+	var event history.Event
+	var eventType string
+	var kind string
+	var occurredAt string
+
+	err := s.db.QueryRow(`
+		SELECT
+			memory_id,
+			event_type,
+			kind,
+			text,
+			path,
+			line,
+			commit_hash,
+			occurred_at
+		FROM history_events
+		WHERE path = ? AND line = ?
+		ORDER BY id DESC
+		LIMIT 1
+	`, path, line).Scan(
+		&event.MemoryID,
+		&eventType,
+		&kind,
+		&event.Text,
+		&event.Path,
+		&event.Line,
+		&event.CommitHash,
+		&occurredAt,
+	)
+
+	if err == sql.ErrNoRows {
+		return history.Event{}, false, nil
+	}
+
+	if err != nil {
+		return history.Event{}, false, err
+	}
+
+	event.Type = history.EventType(eventType)
+	event.Kind = syntax.Kind(kind)
+
+	event.OccurredAt, err = time.Parse(
+		time.RFC3339Nano,
+		occurredAt,
+	)
+	if err != nil {
+		return history.Event{}, false, err
+	}
+
+	return event, true, nil
 }

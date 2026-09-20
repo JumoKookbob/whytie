@@ -56,9 +56,41 @@ func SyncWithProvenance(
 		activeIDs[m.ID] = struct{}{}
 	}
 
+	historyStore, hasHistory := store.(storage.HistoryStore)
+	now := time.Now().UTC()
+
+	// Record deletions before removing memories from the active store.
+	//
+	// The snapshot is important because after Delete() the active memory no
+	// longer exists. History must therefore preserve enough information to
+	// explain what reasoning was deleted.
 	for _, m := range existing {
 		if _, ok := activeIDs[m.ID]; ok {
 			continue
+		}
+
+		if hasHistory {
+			event := history.Event{
+				MemoryID: m.ID,
+				Type:     history.EventDeleted,
+
+				Kind: m.Kind,
+				Text: m.Text,
+
+				Path: m.CurrentPath,
+				Line: m.CurrentLine,
+
+				CommitHash: resolveProvenance(
+					provenance,
+					m.CurrentPath,
+					m.CurrentLine,
+				),
+				OccurredAt: now,
+			}
+
+			if err := historyStore.SaveHistory(event); err != nil {
+				return nil, err
+			}
 		}
 
 		if err := store.Delete(m.ID); err != nil {
@@ -72,12 +104,9 @@ func SyncWithProvenance(
 		}
 	}
 
-	historyStore, ok := store.(storage.HistoryStore)
-	if !ok {
+	if !hasHistory {
 		return reconciled, nil
 	}
-
-	now := time.Now().UTC()
 
 	for _, current := range reconciled {
 		previous, existed := existingByID[current.ID]
@@ -86,8 +115,13 @@ func SyncWithProvenance(
 			event := history.Event{
 				MemoryID: current.ID,
 				Type:     history.EventCreated,
-				Path:     current.CurrentPath,
-				Line:     current.CurrentLine,
+
+				Kind: current.Kind,
+				Text: current.Text,
+
+				Path: current.CurrentPath,
+				Line: current.CurrentLine,
+
 				CommitHash: resolveProvenance(
 					provenance,
 					current.CurrentPath,
@@ -111,8 +145,13 @@ func SyncWithProvenance(
 		event := history.Event{
 			MemoryID: current.ID,
 			Type:     eventType,
-			Path:     current.CurrentPath,
-			Line:     current.CurrentLine,
+
+			Kind: current.Kind,
+			Text: current.Text,
+
+			Path: current.CurrentPath,
+			Line: current.CurrentLine,
+
 			CommitHash: resolveProvenance(
 				provenance,
 				current.CurrentPath,

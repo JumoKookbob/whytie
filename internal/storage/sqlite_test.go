@@ -575,3 +575,169 @@ func TestSQLiteHistoryPersistsAcrossReopen(t *testing.T) {
 		)
 	}
 }
+
+func TestSQLiteHistoryPersistsReasoningSnapshotAcrossReopen(t *testing.T) {
+	root := t.TempDir()
+
+	if err := os.Mkdir(
+		filepath.Join(root, ".whytie"),
+		0755,
+	); err != nil {
+		t.Fatalf("Mkdir() error = %v", err)
+	}
+
+	store, err := OpenSQLite(root)
+	if err != nil {
+		t.Fatalf("OpenSQLite() error = %v", err)
+	}
+
+	event := history.Event{
+		MemoryID:   "decision-1",
+		Type:       history.EventDeleted,
+		Kind:       syntax.Decision,
+		Text:       "SQLite WAL 모드를 사용한다",
+		Path:       "database.go",
+		Line:       4,
+		CommitHash: "fc30570",
+		OccurredAt: time.Date(
+			2026,
+			time.September,
+			20,
+			12,
+			0,
+			0,
+			0,
+			time.UTC,
+		),
+	}
+
+	if err := store.SaveHistory(event); err != nil {
+		store.Close()
+		t.Fatalf("SaveHistory() error = %v", err)
+	}
+
+	if err := store.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+
+	store, err = OpenSQLite(root)
+	if err != nil {
+		t.Fatalf("reopen OpenSQLite() error = %v", err)
+	}
+	defer store.Close()
+
+	events, err := store.ListHistory("decision-1")
+	if err != nil {
+		t.Fatalf("ListHistory() error = %v", err)
+	}
+
+	if len(events) != 1 {
+		t.Fatalf("history contains %d events, want 1", len(events))
+	}
+
+	got := events[0]
+
+	if got.Kind != syntax.Decision {
+		t.Errorf(
+			"Kind = %q, want %q",
+			got.Kind,
+			syntax.Decision,
+		)
+	}
+
+	if got.Text != "SQLite WAL 모드를 사용한다" {
+		t.Errorf(
+			"Text = %q, want %q",
+			got.Text,
+			"SQLite WAL 모드를 사용한다",
+		)
+	}
+}
+
+func TestSQLiteFindHistoryAtReturnsDeletedReasoning(t *testing.T) {
+	root := t.TempDir()
+
+	if err := os.MkdirAll(
+		filepath.Join(root, ".whytie"),
+		0755,
+	); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+
+	store, err := OpenSQLite(root)
+	if err != nil {
+		t.Fatalf("OpenSQLite() error = %v", err)
+	}
+	defer store.Close()
+
+	created := history.Event{
+		MemoryID:   "decision-1",
+		Type:       history.EventCreated,
+		Kind:       syntax.Decision,
+		Text:       "SQLite를 사용한다",
+		Path:       "main.go",
+		Line:       4,
+		CommitHash: "abc1234",
+		OccurredAt: time.Now().UTC(),
+	}
+
+	deleted := history.Event{
+		MemoryID:   "decision-1",
+		Type:       history.EventDeleted,
+		Kind:       syntax.Decision,
+		Text:       "SQLite WAL 모드를 사용한다",
+		Path:       "database.go",
+		Line:       4,
+		CommitHash: "def5678",
+		OccurredAt: time.Now().UTC(),
+	}
+
+	if err := store.SaveHistory(created); err != nil {
+		t.Fatalf("SaveHistory(created) error = %v", err)
+	}
+
+	if err := store.SaveHistory(deleted); err != nil {
+		t.Fatalf("SaveHistory(deleted) error = %v", err)
+	}
+
+	event, ok, err := store.FindHistoryAt("database.go", 4)
+	if err != nil {
+		t.Fatalf("FindHistoryAt() error = %v", err)
+	}
+
+	if !ok {
+		t.Fatal("FindHistoryAt() found no event, want deleted reasoning")
+	}
+
+	if event.MemoryID != "decision-1" {
+		t.Errorf(
+			"MemoryID = %q, want %q",
+			event.MemoryID,
+			"decision-1",
+		)
+	}
+
+	if event.Type != history.EventDeleted {
+		t.Errorf(
+			"Type = %q, want %q",
+			event.Type,
+			history.EventDeleted,
+		)
+	}
+
+	if event.Kind != syntax.Decision {
+		t.Errorf(
+			"Kind = %q, want %q",
+			event.Kind,
+			syntax.Decision,
+		)
+	}
+
+	if event.Text != "SQLite WAL 모드를 사용한다" {
+		t.Errorf(
+			"Text = %q, want %q",
+			event.Text,
+			"SQLite WAL 모드를 사용한다",
+		)
+	}
+}

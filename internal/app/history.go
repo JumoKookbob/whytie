@@ -74,8 +74,27 @@ func HistoryAt(
 	}
 
 	target, ok := FindMemoryAt(memories, path, line)
-	if !ok {
+	if ok {
+		return History(w, historyStore, target)
+	}
+
+	event, found, err := historyStore.FindHistoryAt(path, line)
+	if err != nil {
+		return err
+	}
+
+	if !found {
 		return fmt.Errorf("no memory at %s", location)
+	}
+
+	target = memory.Memory{
+		ID:          event.MemoryID,
+		Kind:        event.Kind,
+		Text:        event.Text,
+		CreatedPath: event.Path,
+		CreatedLine: event.Line,
+		CurrentPath: event.Path,
+		CurrentLine: event.Line,
 	}
 
 	return History(w, historyStore, target)

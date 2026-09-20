@@ -2,213 +2,215 @@ package history
 
 import (
 	"testing"
-	"time"
 
 	"github.com/JumoKookbob/whytie/internal/memory"
 	"github.com/JumoKookbob/whytie/internal/syntax"
 )
 
 func TestEventRepresentsReasoningCreation(t *testing.T) {
-	when := time.Date(
-		2026,
-		time.September,
-		20,
-		10,
-		30,
-		0,
-		0,
-		time.UTC,
-	)
-
 	event := Event{
-		MemoryID:   "memory-123",
+		MemoryID:   "memory-1",
 		Type:       EventCreated,
-		Path:       "internal/storage/db.go",
+		Path:       "internal/storage/sqlite.go",
 		Line:       42,
 		CommitHash: "abc123",
-		OccurredAt: when,
 	}
 
-	if event.MemoryID != "memory-123" {
-		t.Fatalf("MemoryID = %q, want %q", event.MemoryID, "memory-123")
+	if event.MemoryID != "memory-1" {
+		t.Errorf("MemoryID = %q, want %q", event.MemoryID, "memory-1")
 	}
 
 	if event.Type != EventCreated {
-		t.Fatalf("Type = %q, want %q", event.Type, EventCreated)
+		t.Errorf("Type = %q, want %q", event.Type, EventCreated)
 	}
 
-	if event.Path != "internal/storage/db.go" {
-		t.Fatalf(
+	if event.Path != "internal/storage/sqlite.go" {
+		t.Errorf(
 			"Path = %q, want %q",
 			event.Path,
-			"internal/storage/db.go",
+			"internal/storage/sqlite.go",
 		)
 	}
 
 	if event.Line != 42 {
-		t.Fatalf("Line = %d, want 42", event.Line)
+		t.Errorf("Line = %d, want %d", event.Line, 42)
 	}
 
 	if event.CommitHash != "abc123" {
-		t.Fatalf(
+		t.Errorf(
 			"CommitHash = %q, want %q",
 			event.CommitHash,
 			"abc123",
-		)
-	}
-
-	if !event.OccurredAt.Equal(when) {
-		t.Fatalf(
-			"OccurredAt = %v, want %v",
-			event.OccurredAt,
-			when,
 		)
 	}
 }
 
 func TestEventTypesAreStable(t *testing.T) {
 	tests := []struct {
+		name string
 		got  EventType
-		want string
+		want EventType
 	}{
-		{EventCreated, "created"},
-		{EventMoved, "moved"},
-		{EventChanged, "changed"},
+		{
+			name: "created",
+			got:  EventCreated,
+			want: "created",
+		},
+		{
+			name: "moved",
+			got:  EventMoved,
+			want: "moved",
+		},
+		{
+			name: "changed",
+			got:  EventChanged,
+			want: "changed",
+		},
+		{
+			name: "deleted",
+			got:  EventDeleted,
+			want: "deleted",
+		},
 	}
 
-	for _, test := range tests {
-		if string(test.got) != test.want {
-			t.Fatalf(
-				"EventType = %q, want %q",
-				test.got,
-				test.want,
-			)
-		}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.got != tt.want {
+				t.Errorf(
+					"event type = %q, want %q",
+					tt.got,
+					tt.want,
+				)
+			}
+		})
 	}
 }
 
 func TestDetectReasoningChanges(t *testing.T) {
+	base := memory.Memory{
+		ID:          "memory-1",
+		Kind:        syntax.Decision,
+		Text:        "SQLite를 사용한다",
+		CreatedPath: "main.go",
+		CreatedLine: 10,
+		CurrentPath: "main.go",
+		CurrentLine: 10,
+	}
+
 	tests := []struct {
 		name     string
 		previous memory.Memory
 		current  memory.Memory
 		wantType EventType
-		wantOK   bool
+		want     bool
 	}{
 		{
-			name: "unchanged",
-			previous: memory.Memory{
-				ID:          "a",
-				Kind:        syntax.Kind("decision"),
-				Text:        "SQLite를 사용한다",
-				CurrentPath: "main.go",
-				CurrentLine: 10,
-			},
-			current: memory.Memory{
-				ID:          "a",
-				Kind:        syntax.Kind("decision"),
-				Text:        "SQLite를 사용한다",
-				CurrentPath: "main.go",
-				CurrentLine: 10,
-			},
-			wantOK: false,
+			name:     "unchanged",
+			previous: base,
+			current:  base,
+			wantType: "",
+			want:     false,
 		},
 		{
-			name: "moved to another file",
-			previous: memory.Memory{
-				ID:          "a",
-				Kind:        syntax.Kind("decision"),
-				Text:        "SQLite를 사용한다",
-				CurrentPath: "main.go",
-				CurrentLine: 10,
-			},
-			current: memory.Memory{
-				ID:          "a",
-				Kind:        syntax.Kind("decision"),
-				Text:        "SQLite를 사용한다",
-				CurrentPath: "internal/storage/db.go",
-				CurrentLine: 42,
-			},
+			name:     "moved to another file",
+			previous: base,
+			current: func() memory.Memory {
+				m := base
+				m.CurrentPath = "internal/storage/sqlite.go"
+				m.CurrentLine = 42
+				return m
+			}(),
 			wantType: EventMoved,
-			wantOK:   true,
+			want:     true,
 		},
 		{
-			name: "moved within same file",
-			previous: memory.Memory{
-				ID:          "a",
-				Kind:        syntax.Kind("decision"),
-				Text:        "SQLite를 사용한다",
-				CurrentPath: "main.go",
-				CurrentLine: 10,
-			},
-			current: memory.Memory{
-				ID:          "a",
-				Kind:        syntax.Kind("decision"),
-				Text:        "SQLite를 사용한다",
-				CurrentPath: "main.go",
-				CurrentLine: 30,
-			},
+			name:     "moved within same file",
+			previous: base,
+			current: func() memory.Memory {
+				m := base
+				m.CurrentLine = 20
+				return m
+			}(),
 			wantType: EventMoved,
-			wantOK:   true,
+			want:     true,
 		},
 		{
-			name: "text changed",
-			previous: memory.Memory{
-				ID:          "a",
-				Kind:        syntax.Kind("decision"),
-				Text:        "SQLite를 사용한다",
-				CurrentPath: "main.go",
-				CurrentLine: 10,
-			},
-			current: memory.Memory{
-				ID:          "a",
-				Kind:        syntax.Kind("decision"),
-				Text:        "SQLite를 기본 저장소로 사용한다",
-				CurrentPath: "main.go",
-				CurrentLine: 10,
-			},
+			name:     "text changed",
+			previous: base,
+			current: func() memory.Memory {
+				m := base
+				m.Text = "SQLite WAL 모드를 사용한다"
+				return m
+			}(),
 			wantType: EventChanged,
-			wantOK:   true,
+			want:     true,
 		},
 		{
-			name: "different identity",
-			previous: memory.Memory{
-				ID:          "a",
-				Kind:        syntax.Kind("decision"),
-				Text:        "SQLite를 사용한다",
-				CurrentPath: "main.go",
-				CurrentLine: 10,
-			},
-			current: memory.Memory{
-				ID:          "b",
-				Kind:        syntax.Kind("decision"),
-				Text:        "SQLite를 사용한다",
-				CurrentPath: "main.go",
-				CurrentLine: 10,
-			},
-			wantOK: false,
+			name:     "kind changed",
+			previous: base,
+			current: func() memory.Memory {
+				m := base
+				m.Kind = syntax.Reason
+				return m
+			}(),
+			wantType: EventChanged,
+			want:     true,
+		},
+		{
+			name:     "different identity",
+			previous: base,
+			current: func() memory.Memory {
+				m := base
+				m.ID = "memory-2"
+				return m
+			}(),
+			wantType: "",
+			want:     false,
 		},
 	}
 
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			gotType, gotOK := Detect(test.previous, test.current)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotType, got := Detect(tt.previous, tt.current)
 
-			if gotOK != test.wantOK {
+			if got != tt.want {
 				t.Fatalf(
-					"Detect() ok = %v, want %v",
-					gotOK,
-					test.wantOK,
+					"Detect() changed = %v, want %v",
+					got,
+					tt.want,
 				)
 			}
 
-			if gotType != test.wantType {
-				t.Fatalf(
+			if gotType != tt.wantType {
+				t.Errorf(
 					"Detect() type = %q, want %q",
 					gotType,
-					test.wantType,
+					tt.wantType,
 				)
 			}
 		})
+	}
+}
+
+func TestEventPreservesReasoningSnapshot(t *testing.T) {
+	event := Event{
+		MemoryID: "decision-1",
+		Type:     EventDeleted,
+		Kind:     syntax.Decision,
+		Text:     "SQLite WAL 모드를 사용한다",
+		Path:     "database.go",
+		Line:     4,
+	}
+
+	if event.Kind != syntax.Decision {
+		t.Errorf("Kind = %q, want %q", event.Kind, syntax.Decision)
+	}
+
+	if event.Text != "SQLite WAL 모드를 사용한다" {
+		t.Errorf(
+			"Text = %q, want %q",
+			event.Text,
+			"SQLite WAL 모드를 사용한다",
+		)
 	}
 }
