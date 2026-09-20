@@ -256,3 +256,102 @@ func TestSyncRemovesDeletedMemoryFromStore(t *testing.T) {
 		t.Fatalf("store contains %d memories, want 0", len(saved))
 	}
 }
+
+func TestSyncPreservesIdentityAcrossFileMove(t *testing.T) {
+	root := t.TempDir()
+
+	if err := os.MkdirAll(filepath.Join(root, ".whytie"), 0755); err != nil {
+		t.Fatalf("MkdirAll(.whytie) error = %v", err)
+	}
+
+	store, err := storage.OpenSQLite(root)
+	if err != nil {
+		t.Fatalf("OpenSQLite() error = %v", err)
+	}
+	defer store.Close()
+
+	first := scanner.SourceComment{
+		Kind:         syntax.Kind("decision"),
+		Text:         "SQLite를 사용한다",
+		File:         filepath.Join(root, "main.go"),
+		RelativePath: "main.go",
+		Line:         10,
+	}
+
+	firstResult, err := Sync(store, []scanner.SourceComment{first})
+	if err != nil {
+		t.Fatalf("first Sync() error = %v", err)
+	}
+
+	if len(firstResult) != 1 {
+		t.Fatalf("first Sync() returned %d memories, want 1", len(firstResult))
+	}
+
+	originalID := firstResult[0].ID
+
+	moved := scanner.SourceComment{
+		Kind:         syntax.Kind("decision"),
+		Text:         "SQLite를 사용한다",
+		File:         filepath.Join(root, "internal", "storage", "db.go"),
+		RelativePath: filepath.Join("internal", "storage", "db.go"),
+		Line:         42,
+	}
+
+	secondResult, err := Sync(store, []scanner.SourceComment{moved})
+	if err != nil {
+		t.Fatalf("second Sync() error = %v", err)
+	}
+
+	if len(secondResult) != 1 {
+		t.Fatalf("second Sync() returned %d memories, want 1", len(secondResult))
+	}
+
+	got := secondResult[0]
+
+	if got.ID != originalID {
+		t.Fatalf("ID = %q, want original ID %q", got.ID, originalID)
+	}
+
+	if got.CreatedPath != "main.go" {
+		t.Fatalf("CreatedPath = %q, want %q", got.CreatedPath, "main.go")
+	}
+
+	if got.CreatedLine != 10 {
+		t.Fatalf("CreatedLine = %d, want 10", got.CreatedLine)
+	}
+
+	wantCurrentPath := filepath.Join("internal", "storage", "db.go")
+
+	if got.CurrentPath != wantCurrentPath {
+		t.Fatalf("CurrentPath = %q, want %q", got.CurrentPath, wantCurrentPath)
+	}
+
+	if got.CurrentLine != 42 {
+		t.Fatalf("CurrentLine = %d, want 42", got.CurrentLine)
+	}
+
+	stored, err := store.Get(originalID)
+	if err != nil {
+		t.Fatalf("store.Get() error = %v", err)
+	}
+
+	if stored.ID != originalID {
+		t.Fatalf("stored ID = %q, want %q", stored.ID, originalID)
+	}
+
+	if stored.CreatedPath != "main.go" {
+		t.Fatalf("stored CreatedPath = %q, want %q", stored.CreatedPath, "main.go")
+	}
+
+	if stored.CurrentPath != wantCurrentPath {
+		t.Fatalf(
+			"stored CurrentPath = %q, want %q",
+			stored.CurrentPath,
+			wantCurrentPath,
+		)
+	}
+
+	if stored.CurrentLine != 42 {
+		t.Fatalf("stored CurrentLine = %d, want 42", stored.CurrentLine)
+	}
+}
