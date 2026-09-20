@@ -110,6 +110,41 @@ func MatchMoved(
 	return match, true
 }
 
+func MatchMovedAcrossFiles(
+	source scanner.SourceComment,
+	existing []memory.Memory,
+) (memory.Memory, bool) {
+	var match memory.Memory
+	count := 0
+
+	for _, candidate := range existing {
+		if candidate.Kind != source.Kind {
+			continue
+		}
+
+		if candidate.Text != source.Text {
+			continue
+		}
+
+		if candidate.CurrentPath == source.RelativePath {
+			continue
+		}
+
+		match = candidate
+		count++
+
+		if count > 1 {
+			return memory.Memory{}, false
+		}
+	}
+
+	if count != 1 {
+		return memory.Memory{}, false
+	}
+
+	return match, true
+}
+
 func UpdateLocation(
 	existing memory.Memory,
 	source scanner.SourceComment,
@@ -144,6 +179,10 @@ func Reconcile(
 	}
 
 	if matched, ok := MatchMoved(source, existing); ok {
+		return UpdateLocation(matched, source), nil
+	}
+
+	if matched, ok := MatchMovedAcrossFiles(source, existing); ok {
 		return UpdateLocation(matched, source), nil
 	}
 

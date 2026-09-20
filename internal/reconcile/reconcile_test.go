@@ -526,3 +526,107 @@ func TestReconcileUpdatesTextAtSameLocation(t *testing.T) {
 		t.Errorf("CurrentLine = %d, want 5", got.CurrentLine)
 	}
 }
+
+func TestReconcilePreservesIdentityAcrossFileMove(t *testing.T) {
+	existing := memory.Memory{
+		ID:          "existing-id",
+		Kind:        syntax.Kind("decision"),
+		Text:        "SQLite를 사용한다",
+		CreatedPath: "main.go",
+		CreatedLine: 10,
+		CurrentPath: "main.go",
+		CurrentLine: 10,
+	}
+
+	source := scanner.SourceComment{
+		Kind:         syntax.Kind("decision"),
+		Text:         "SQLite를 사용한다",
+		File:         "internal/storage/db.go",
+		RelativePath: "internal/storage/db.go",
+		Line:         42,
+	}
+
+	got, err := Reconcile(source, []memory.Memory{existing})
+	if err != nil {
+		t.Fatalf("Reconcile() error = %v", err)
+	}
+
+	if got.ID != existing.ID {
+		t.Fatalf("Reconcile() ID = %q, want %q", got.ID, existing.ID)
+	}
+
+	if got.CreatedPath != "main.go" {
+		t.Fatalf("CreatedPath = %q, want %q", got.CreatedPath, "main.go")
+	}
+
+	if got.CreatedLine != 10 {
+		t.Fatalf("CreatedLine = %d, want %d", got.CreatedLine, 10)
+	}
+
+	if got.CurrentPath != "internal/storage/db.go" {
+		t.Fatalf(
+			"CurrentPath = %q, want %q",
+			got.CurrentPath,
+			"internal/storage/db.go",
+		)
+	}
+
+	if got.CurrentLine != 42 {
+		t.Fatalf("CurrentLine = %d, want %d", got.CurrentLine, 42)
+	}
+}
+
+func TestReconcileDoesNotGuessAmbiguousCrossFileMove(t *testing.T) {
+	existing := []memory.Memory{
+		{
+			ID:          "first-id",
+			Kind:        syntax.Kind("decision"),
+			Text:        "SQLite를 사용한다",
+			CreatedPath: "first.go",
+			CreatedLine: 10,
+			CurrentPath: "first.go",
+			CurrentLine: 10,
+		},
+		{
+			ID:          "second-id",
+			Kind:        syntax.Kind("decision"),
+			Text:        "SQLite를 사용한다",
+			CreatedPath: "second.go",
+			CreatedLine: 20,
+			CurrentPath: "second.go",
+			CurrentLine: 20,
+		},
+	}
+
+	source := scanner.SourceComment{
+		Kind:         syntax.Kind("decision"),
+		Text:         "SQLite를 사용한다",
+		File:         "internal/storage/db.go",
+		RelativePath: "internal/storage/db.go",
+		Line:         42,
+	}
+
+	got, err := Reconcile(source, existing)
+	if err != nil {
+		t.Fatalf("Reconcile() error = %v", err)
+	}
+
+	if got.ID == "first-id" || got.ID == "second-id" {
+		t.Fatalf(
+			"Reconcile() reused ambiguous existing ID %q; want a new ID",
+			got.ID,
+		)
+	}
+
+	if got.CurrentPath != "internal/storage/db.go" {
+		t.Fatalf(
+			"CurrentPath = %q, want %q",
+			got.CurrentPath,
+			"internal/storage/db.go",
+		)
+	}
+
+	if got.CurrentLine != 42 {
+		t.Fatalf("CurrentLine = %d, want 42", got.CurrentLine)
+	}
+}
