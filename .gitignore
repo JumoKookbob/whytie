@@ -3,3 +3,6 @@
 
 # Local build artifacts
 whytie.exe
+
+# Release packages
+/dist/
