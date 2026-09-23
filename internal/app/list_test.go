@@ -49,6 +49,15 @@ func TestListWritesReasoningStructure(t *testing.T) {
 				CurrentPath: "internal/store/db.go",
 				CurrentLine: 41,
 			},
+			{
+				ID:          "memory-3",
+				Kind:        syntax.Question,
+				Text:        "캐시는 어떻게 처리할까?",
+				CreatedPath: "internal/store/db.go",
+				CreatedLine: 50,
+				CurrentPath: "internal/store/db.go",
+				CurrentLine: 50,
+			},
 		},
 	}
 
@@ -59,8 +68,16 @@ func TestListWritesReasoningStructure(t *testing.T) {
 		t.Fatalf("List() error = %v", err)
 	}
 
-	want := "decision: SQLite  internal/store/db.go:40\n" +
-		"└─ reason: local-first에 적합함  internal/store/db.go:41\n"
+	want := "" +
+		"📄 internal/store/db.go\n" +
+		"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
+		"\n" +
+		"   40  ✅ DECISION  SQLite\n" +
+		"   41  └─ 💡 REASON    local-first에 적합함\n" +
+		"\n" +
+		"────────────────────────────────────────────────────\n" +
+		"\n" +
+		"   50  ❓ QUESTION  캐시는 어떻게 처리할까?\n"
 
 	if output.String() != want {
 		t.Errorf(

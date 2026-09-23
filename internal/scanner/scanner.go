@@ -75,6 +75,7 @@ type lexicalState struct {
 	inGoBlock      bool
 	inPythonTriple bool
 	pythonQuote    string
+	inSlashBlock   bool
 }
 
 func ScanFile(path string) ([]SourceComment, error) {
@@ -99,6 +100,21 @@ func ScanFile(path string) ([]SourceComment, error) {
 
 		if lineNumber == 1 {
 			line = strings.TrimPrefix(line, "\uFEFF")
+		}
+
+		if supportsSlashBlockComments(style) {
+			blockBody, handled := slashBlockBody(line, &state)
+			if handled {
+				if parsed, ok := parseSlashBlockBody(blockBody); ok {
+					comments = append(comments, SourceComment{
+						Kind: parsed.Kind,
+						Text: parsed.Text,
+						File: path,
+						Line: lineNumber,
+					})
+				}
+				continue
+			}
 		}
 
 		if shouldIgnoreLineForStrings(line, ext, &state) {
@@ -127,6 +143,93 @@ func ScanFile(path string) ([]SourceComment, error) {
 	}
 
 	return comments, nil
+}
+
+func supportsSlashBlockComments(style commentStyle) bool {
+	return style == commentStyleSlash || style == commentStyleBlock
+}
+
+func parseSlashBlockBody(body string) (syntax.Comment, bool) {
+	body = strings.TrimSpace(body)
+	body = strings.TrimPrefix(body, "*")
+	body = strings.TrimSpace(body)
+	if body == "" {
+		return syntax.Comment{}, false
+	}
+
+	return syntax.Parse("// " + body)
+}
+
+func slashBlockBody(line string, state *lexicalState) (string, bool) {
+	if state.inSlashBlock {
+		if end := strings.Index(line, "*/"); end >= 0 {
+			state.inSlashBlock = false
+			return line[:end], true
+		}
+		return line, true
+	}
+
+	start := findSlashBlockStartOutsideStrings(line)
+	if start < 0 {
+		return "", false
+	}
+
+	after := line[start+2:]
+	if end := strings.Index(after, "*/"); end >= 0 {
+		return after[:end], true
+	}
+
+	state.inSlashBlock = true
+	return after, true
+}
+
+func findSlashBlockStartOutsideStrings(line string) int {
+	var quote byte
+	escaped := false
+	inBacktick := false
+
+	for i := 0; i+1 < len(line); i++ {
+		ch := line[i]
+
+		if escaped {
+			escaped = false
+			continue
+		}
+
+		if quote != 0 {
+			if ch == '\\' {
+				escaped = true
+				continue
+			}
+			if ch == quote {
+				quote = 0
+			}
+			continue
+		}
+
+		if inBacktick {
+			if ch == '`' {
+				inBacktick = false
+			}
+			continue
+		}
+
+		switch ch {
+		case '"', '\'':
+			quote = ch
+		case '`':
+			inBacktick = true
+		case '/':
+			if line[i+1] == '/' {
+				return -1
+			}
+			if line[i+1] == '*' {
+				return i
+			}
+		}
+	}
+
+	return -1
 }
 
 func shouldIgnoreLineForStrings(line, ext string, state *lexicalState) bool {

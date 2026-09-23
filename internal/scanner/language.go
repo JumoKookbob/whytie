@@ -19,7 +19,7 @@ func commentStyleForPath(path string) commentStyle {
 	ext := strings.ToLower(filepath.Ext(path))
 
 	switch ext {
-	// // comments
+	// // comments, with /* ... */ block comments handled by ScanFile
 	case ".go",
 		".rs",
 		".c", ".h", ".cc", ".cpp", ".cxx", ".hpp",

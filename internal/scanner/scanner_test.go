@@ -558,7 +558,6 @@ func TestScanFileUsesLanguageSpecificCommentSyntax(t *testing.T) {
 // ? 이것은 Go의 올바른 WhyTie 주석이다
 # ? 이것은 Go에서 잡으면 안 된다
 <!-- ? 이것도 잡으면 안 된다 -->
-/* ? 이것도 현재 WhyTie Go 문법으로는 잡지 않는다 */
 `,
 			wantText: "이것은 Go의 올바른 WhyTie 주석이다",
 		},
@@ -960,6 +959,94 @@ func main() {}
 	}
 
 	if comments[0].Text != "실제 소스 파일은 읽어야 한다" {
+		t.Fatalf("unexpected comment: %#v", comments[0])
+	}
+}
+
+func TestScanFileSlashBlockComments(t *testing.T) {
+	tests := []struct {
+		name     string
+		filename string
+	}{
+		{name: "javascript", filename: "app.js"},
+		{name: "typescript", filename: "app.ts"},
+		{name: "java", filename: "App.java"},
+		{name: "c", filename: "app.c"},
+		{name: "go", filename: "app.go"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, tt.filename)
+
+			source := `/ **PLACEHOLDER** /`
+			source = "/**\n * + 선형 탐색을 사용한다\n * < 현재 데이터 규모가 작기 때문이다\n */\n"
+
+			if err := os.WriteFile(path, []byte(source), 0644); err != nil {
+				t.Fatalf("write test file: %v", err)
+			}
+
+			comments, err := ScanFile(path)
+			if err != nil {
+				t.Fatalf("ScanFile() error = %v", err)
+			}
+
+			if len(comments) != 2 {
+				t.Fatalf("ScanFile() returned %d comments, want 2: %#v", len(comments), comments)
+			}
+
+			if comments[0].Kind != syntax.Decision || comments[0].Text != "선형 탐색을 사용한다" || comments[0].Line != 2 {
+				t.Errorf("first comment = %#v", comments[0])
+			}
+			if comments[1].Kind != syntax.Reason || comments[1].Text != "현재 데이터 규모가 작기 때문이다" || comments[1].Line != 3 {
+				t.Errorf("second comment = %#v", comments[1])
+			}
+		})
+	}
+}
+
+func TestScanFileSingleLineSlashBlockComment(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "app.js")
+	source := "/* + 단일 라인 block comment */\n"
+
+	if err := os.WriteFile(path, []byte(source), 0644); err != nil {
+		t.Fatalf("write test file: %v", err)
+	}
+
+	comments, err := ScanFile(path)
+	if err != nil {
+		t.Fatalf("ScanFile() error = %v", err)
+	}
+	if len(comments) != 1 {
+		t.Fatalf("ScanFile() returned %d comments, want 1: %#v", len(comments), comments)
+	}
+	if comments[0].Kind != syntax.Decision || comments[0].Text != "단일 라인 block comment" {
+		t.Fatalf("unexpected comment: %#v", comments[0])
+	}
+}
+
+func TestScanFileIgnoresOrdinaryJSDocAndBlockMarkersInsideStrings(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "app.js")
+	source := "const fake = \"/* + 이건 주석 아님 */\";\n" +
+		"const template = `/* + 이것도 주석 아님 */`;\n\n" +
+		"/**\n * Returns a user by ID.\n * @param id user ID\n */\n\n" +
+		"// ? 실제 질문이다\n"
+
+	if err := os.WriteFile(path, []byte(source), 0644); err != nil {
+		t.Fatalf("write test file: %v", err)
+	}
+
+	comments, err := ScanFile(path)
+	if err != nil {
+		t.Fatalf("ScanFile() error = %v", err)
+	}
+	if len(comments) != 1 {
+		t.Fatalf("ScanFile() returned %d comments, want 1: %#v", len(comments), comments)
+	}
+	if comments[0].Kind != syntax.Question || comments[0].Text != "실제 질문이다" {
 		t.Fatalf("unexpected comment: %#v", comments[0])
 	}
 }

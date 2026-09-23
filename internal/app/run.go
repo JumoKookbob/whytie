@@ -74,15 +74,45 @@ func RunHistoryFrom(w io.Writer, start string, target string) error {
 	return RunHistory(w, root, target)
 }
 
+func writeHelp(w io.Writer) {
+	fmt.Fprintln(w, "WhyTie - remember why your code exists.")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Usage:")
+	fmt.Fprintln(w, "  whytie <command> [arguments]")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Commands:")
+	fmt.Fprintln(w, "  init                          Initialize WhyTie in the current project")
+	fmt.Fprintln(w, "  scan <path>                   Scan source files for WhyTie annotations")
+	fmt.Fprintln(w, "  list                          List recorded reasoning")
+	fmt.Fprintln(w, "  why <memory-id|file:line>     Show reasoning for a memory or source location")
+	fmt.Fprintln(w, "  history <memory-id|file:line> Show reasoning history")
+	fmt.Fprintln(w, "  resume                        Show recent recorded context")
+	fmt.Fprintln(w, "  version                       Show the WhyTie version")
+	fmt.Fprintln(w, "  help                          Show this help")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Annotations:")
+	fmt.Fprintln(w, "  // ?  question")
+	fmt.Fprintln(w, "  // +  decision")
+	fmt.Fprintln(w, "  // -  rejected")
+	fmt.Fprintln(w, "  // x  failed")
+	fmt.Fprintln(w, "  // <  reason")
+	fmt.Fprintln(w, "  // !  important")
+}
+
 func Run(args []string, stdout io.Writer, stderr io.Writer, start string) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stdout, "WhyTie")
+		writeHelp(stdout)
 		return 0
 	}
 
 	switch args[0] {
+
+	case "help", "--help", "-h":
+		writeHelp(stdout)
+		return 0
+
 	case "version":
-		fmt.Fprintln(stdout, "WhyTie v1.1.0")
+		fmt.Fprintln(stdout, "WhyTie v1.2.0")
 		return 0
 
 	case "init":

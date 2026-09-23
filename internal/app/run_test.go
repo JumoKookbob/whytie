@@ -53,8 +53,12 @@ func TestRunListOpensRepositoryAndWritesMemories(t *testing.T) {
 		t.Fatalf("RunList() error = %v", err)
 	}
 
-	want := "decision: SQLite를 사용한다  example.go:3\n" +
-		"└─ reason: local-first에 적합하기 때문에  example.go:4\n"
+	want := "" +
+		"📄 example.go\n" +
+		"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
+		"\n" +
+		"    3  ✅ DECISION  SQLite를 사용한다\n" +
+		"    4  └─ 💡 REASON    local-first에 적합하기 때문에\n"
 
 	if output.String() != want {
 		t.Errorf(
@@ -170,7 +174,11 @@ func TestRunListFromNestedDirectoryFindsRepositoryRoot(t *testing.T) {
 		t.Fatalf("RunListFrom() error = %v", err)
 	}
 
-	want := "decision: SQLite를 사용한다  example.go:3\n"
+	want := "" +
+		"📄 example.go\n" +
+		"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
+		"\n" +
+		"    3  ✅ DECISION  SQLite를 사용한다\n"
 
 	if output.String() != want {
 		t.Errorf(
@@ -210,14 +218,14 @@ func TestRunScanFromNestedDirectoryFindsRepositoryRoot(t *testing.T) {
 		t.Fatalf("RunScanFrom() error = %v", err)
 	}
 
-	want := "decision: SQLite를 사용한다  example.go:3\n" +
+	scanWant := "decision: SQLite를 사용한다  example.go:3\n" +
 		"└─ reason: local-first에 적합하기 때문에  example.go:4\n"
 
-	if output.String() != want {
+	if output.String() != scanWant {
 		t.Errorf(
 			"RunScanFrom() output =\n%q\nwant:\n%q",
 			output.String(),
-			want,
+			scanWant,
 		)
 	}
 
@@ -227,35 +235,80 @@ func TestRunScanFromNestedDirectoryFindsRepositoryRoot(t *testing.T) {
 		t.Fatalf("RunListFrom() error = %v", err)
 	}
 
-	if listOutput.String() != want {
+	listWant := "" +
+		"📄 example.go\n" +
+		"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
+		"\n" +
+		"    3  ✅ DECISION  SQLite를 사용한다\n" +
+		"    4  └─ 💡 REASON    local-first에 적합하기 때문에\n"
+
+	if listOutput.String() != listWant {
 		t.Errorf(
 			"persisted output =\n%q\nwant:\n%q",
 			listOutput.String(),
-			want,
+			listWant,
 		)
 	}
 }
 
-func TestRunWithoutCommandWritesName(t *testing.T) {
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-
-	exitCode := Run(nil, &stdout, &stderr, ".")
-
-	if exitCode != 0 {
-		t.Errorf("Run() exit code = %d, want 0", exitCode)
+func TestRunHelp(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{name: "no arguments", args: nil},
+		{name: "help", args: []string{"help"}},
+		{name: "long flag", args: []string{"--help"}},
+		{name: "short flag", args: []string{"-h"}},
 	}
 
-	if stdout.String() != "WhyTie\n" {
-		t.Errorf(
-			"stdout = %q, want %q",
-			stdout.String(),
-			"WhyTie\n",
-		)
-	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var stdout bytes.Buffer
+			var stderr bytes.Buffer
 
-	if stderr.String() != "" {
-		t.Errorf("stderr = %q, want empty", stderr.String())
+			exitCode := Run(tt.args, &stdout, &stderr, ".")
+
+			if exitCode != 0 {
+				t.Errorf("Run() exit code = %d, want 0", exitCode)
+			}
+
+			wants := []string{
+				"WhyTie",
+				"Usage:",
+				"whytie <command> [arguments]",
+				"Commands:",
+				"init",
+				"scan <path>",
+				"list",
+				"why <memory-id|file:line>",
+				"history <memory-id|file:line>",
+				"resume",
+				"version",
+				"help",
+				"Annotations:",
+				"// ?  question",
+				"// +  decision",
+				"// -  rejected",
+				"// x  failed",
+				"// <  reason",
+				"// !  important",
+			}
+
+			for _, want := range wants {
+				if !strings.Contains(stdout.String(), want) {
+					t.Errorf(
+						"Run() stdout does not contain %q\nstdout:\n%s",
+						want,
+						stdout.String(),
+					)
+				}
+			}
+
+			if stderr.Len() != 0 {
+				t.Errorf("stderr = %q, want empty", stderr.String())
+			}
+		})
 	}
 }
 
@@ -369,8 +422,12 @@ func TestRunListCommand(t *testing.T) {
 		t.Errorf("Run() exit code = %d, want 0", exitCode)
 	}
 
-	want := "decision: SQLite를 사용한다  example.go:3\n" +
-		"└─ reason: local-first에 적합하기 때문에  example.go:4\n"
+	want := "" +
+		"📄 example.go\n" +
+		"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
+		"\n" +
+		"    3  ✅ DECISION  SQLite를 사용한다\n" +
+		"    4  └─ 💡 REASON    local-first에 적합하기 때문에\n"
 
 	if stdout.String() != want {
 		t.Errorf(
@@ -713,7 +770,7 @@ func TestRunVersionCommand(t *testing.T) {
 		t.Fatalf("exitCode = %d, want 0", exitCode)
 	}
 
-	want := "WhyTie v1.1.0\n"
+	want := "WhyTie v1.2.0\n"
 	if stdout.String() != want {
 		t.Errorf("stdout = %q, want %q", stdout.String(), want)
 	}
