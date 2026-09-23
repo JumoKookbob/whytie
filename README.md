@@ -54,43 +54,7 @@
 
 - Git provenance when available, with operation outside Git repositories.
 
-응, 이건 CHANGELOG.md 내용이고 README도 같이 첨부된 상태로 확인됐어. README는 아직 v1.1.0 기준이고 Windows 설치도 $whytieExe를 수동으로 잡는 방식이라 이번에 바꿔야 해.
 
-우선 CHANGELOG는 전체 교체해도 돼. 아래처럼 가자.
-
-CHANGELOG
-열기
-
-저장하고 나면 README도 꽤 많이 바뀌어야 해. 특히 현재 README에는 v1.1.0 패키지명들이 박혀 있고 , Windows 사용자가 직접 exe 절대경로를 저장하게 되어 있으며 , block annotation도 한 줄에서 열고 닫아야 한다고 적혀 있어서 이제 실제 v1.2 동작과 모순돼.
-
-CHANGELOG 저장한 다음 말해줘. README는 전체 v1.2.0 수정본으로 만들어주는 게 낫다. 700줄짜리에서 네가 일일이 찾게 하지 말자.
-
-ㅇㅇ
-
-좋아. 기존 README의 구조와 설명을 유지하면서 v1.2.0 기준 전체 README로 업데이트했어. 기존 README가 v1.1.0 상태와 수동 실행 경로를 안내하고 있었던 부분도 새 설치 방식에 맞췄어.
-
-README v1.2.0 전체 파일 다운로드
-
-이걸 기존:
-
-README.md
-
-에 통째로 덮어쓰면 돼.
-
-주요 반영 사항은 v1.2.0 상태/패키지명, install.cmd/uninstall.cmd 설치법, 수동 alias 제거, 새 list UI 설명, /_ ... _/·/\*_ ... _/ 지원, help/-h/--help, 현재 limitations까지야. 기존 README에서 block annotation은 한 줄에서 닫혀야 한다고 되어 있었는데, 그 부분도 새 동작에 맞게 수정했다.
-
-덮어쓴 다음에는 코드 건드리지 말고:
-
-git status --short
-go test ./...
-
-두 결과만 보내줘. 그다음 최종 v1.2.0 패키징으로 들어가자.
-
-README-v1.2.0.md
-문서
-
-README-v1.2.0.md
-WhyTie
 
 Git records what changed. WhyTie remembers why.
 
