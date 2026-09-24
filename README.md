@@ -2,22 +2,131 @@
 
 **Git records what changed. WhyTie remembers why.**
 
-WhyTie is a local-first CLI that preserves the reasoning behind your code.
+WhyTie is a local-first CLI for preserving the reasoning behind your code.
 
-Write short comments next to the implementation. Scan your project. Later, retrieve decisions and their reasons, review their history, or use `whytie resume` to revisit recently recorded context.
+Git is excellent at showing **what changed**. But months later, the harder question is often:
 
-No AI, account, or server is required.
+> Why did we make this decision?
+
+WhyTie keeps that context close to the code using small, readable annotations:
 
 ```go
 // ? How should shutdown handle pending writes?
 // + Flush pending writes before shutdown
 // < Prevent user data loss
+// x Drop pending writes on exit
+// < Fast, but unsafe if work is still buffered
+
 func Shutdown() {}
 ```
 
+Then scan your project:
+
+```powershell
+whytie scan .
+```
+
+And come back later with:
+
+```powershell
+whytie resume
+```
+
+WhyTie stores the reasoning locally, keeps its history, and lets you retrieve it by file location or memory ID.
+
+**No AI, account, hosted service, or server is required.**
+
+---
+
+## Why WhyTie?
+
+Code usually tells you **what it does**.
+
+Git usually tells you **what changed**.
+
+Neither reliably tells you **why a non-obvious decision was made**.
+
+That missing context becomes expensive when you:
+
+- return to a side project after months away,
+- revisit a workaround that now looks strange,
+- forget why one dependency was chosen over another,
+- re-open an architectural decision that was already debated,
+- use AI coding tools that can produce code faster than you can remember the reasoning behind it.
+
+WhyTie is designed to preserve that reasoning without requiring a separate knowledge base.
+
+The annotations remain ordinary source comments, so the code stays understandable even without WhyTie.
+
+---
+
+## A 30-second example
+
+Add reasoning next to the implementation:
+
+```go
+// ? Which database should we use?
+// + Use SQLite
+// < The tool should remain local-first with no database server
+// x PostgreSQL
+// < Adds infrastructure that the current product does not need
+```
+
+Scan the project:
+
+```powershell
+whytie scan .
+```
+
+WhyTie displays the reasoning it found:
+
+```text
+📄 storage.go
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+   12  ❓ QUESTION  Which database should we use?
+   13  ✅ DECISION  Use SQLite
+   14  └─ 💡 REASON    The tool should remain local-first with no database server
+   15  ❌ REJECTED  PostgreSQL
+   16  └─ 💡 REASON    Adds infrastructure that the current product does not need
+```
+
+Later:
+
+```powershell
+whytie why storage.go:13
+whytie history storage.go:13
+whytie resume
+```
+
+---
+
+## WhyTie and AI coding agents
+
+WhyTie does not require AI, but it can work well alongside AI coding agents.
+
+An agent can leave WhyTie annotations when it makes a non-trivial implementation decision, so the reasoning stays close to the code instead of disappearing with the chat session.
+
+For example:
+
+```go
+// + Keep SQLite for local storage
+// < The application should remain local-first with no database server
+// x PostgreSQL
+// < Adds infrastructure the current product does not need
+```
+
+This gives future developers — and future AI sessions — a compact record of why the implementation looks the way it does.
+
+The repository includes [`AGENTS.md`](AGENTS.md) with the WhyTie annotation rules for AI coding agents, including what should be recorded, what should be ignored, and how existing WhyTie annotations should be handled.
+
+WhyTie does not verify whether an AI-generated explanation is correct. It stores the reasoning that was written into the source.
+
+---
+
 ## Status
 
-This source version is WhyTie v1.2.1.
+This source version is **WhyTie v1.2.1**.
 
 See [GitHub Releases](https://github.com/JumoKookbob/whytie/releases) for published versions and downloadable packages.
 
@@ -30,20 +139,26 @@ Changes in v1.2.1 include:
 
 WhyTie is under active development. Automated tests and manual checks cover creation, editing, movement, deletion, persistence, retrieval, block-comment scanning, and CLI behavior.
 
+---
+
 ## What WhyTie does
 
-- Captures questions, decisions, reasons, rejected approaches, failed approaches, and important context from source comments.
-- Stores reasoning locally in SQLite.
-- Groups adjacent annotations for readable context.
-- Retrieves reasoning by memory ID or source location.
-- Preserves reasoning identity across recognized edits and moves.
-- Records created, moved, changed, and deleted events.
-- Keeps historical snapshots after annotations disappear.
-- Attaches Git provenance when available.
-- Shows recent recorded events and related context with `resume`.
-- Presents reasoning using a consistent file-oriented CLI layout.
+WhyTie can:
 
-WhyTie retrieves what you recorded. It does not invent explanations or infer your next task.
+- capture questions, decisions, reasons, rejected approaches, failed approaches, and important context from source comments,
+- store reasoning locally in SQLite,
+- group adjacent annotations into readable reasoning blocks,
+- retrieve reasoning by memory ID or source location,
+- preserve reasoning identity across recognized edits and moves,
+- record `created`, `moved`, `changed`, and `deleted` lifecycle events,
+- keep historical snapshots after annotations disappear,
+- attach Git provenance when available,
+- show recent recorded events and related context with `whytie resume`,
+- present reasoning using a consistent file-oriented CLI layout.
+
+WhyTie retrieves what you recorded. It does **not** invent explanations or infer your next task.
+
+---
 
 ## Installation
 
@@ -51,18 +166,20 @@ WhyTie retrieves what you recorded. It does not invent explanations or infer you
 
 The v1.2.1 package targets and archive names are:
 
-| Platform                 | Package name                      |
-| ------------------------ | --------------------------------- |
+| Platform | Package name |
+| --- | --- |
 | Windows Intel/AMD 64-bit | `whytie-v1.2.1-windows-amd64.zip` |
-| Windows ARM64            | `whytie-v1.2.1-windows-arm64.zip` |
-| Linux x86-64             | `whytie-v1.2.1-linux-amd64.zip`   |
-| Linux ARM64              | `whytie-v1.2.1-linux-arm64.zip`   |
-| macOS Intel              | `whytie-v1.2.1-darwin-amd64.zip`  |
-| macOS Apple Silicon      | `whytie-v1.2.1-darwin-arm64.zip`  |
+| Windows ARM64 | `whytie-v1.2.1-windows-arm64.zip` |
+| Linux x86-64 | `whytie-v1.2.1-linux-amd64.zip` |
+| Linux ARM64 | `whytie-v1.2.1-linux-arm64.zip` |
+| macOS Intel | `whytie-v1.2.1-darwin-amd64.zip` |
+| macOS Apple Silicon | `whytie-v1.2.1-darwin-arm64.zip` |
 
 `darwin` means macOS.
 
-Check [GitHub Releases](https://github.com/JumoKookbob/whytie/releases) for available downloads. Prebuilt packages do not require Go. Git is optional and enables Git provenance when available.
+Check [GitHub Releases](https://github.com/JumoKookbob/whytie/releases) for available downloads.
+
+Prebuilt packages do not require Go. Git is optional and enables Git provenance when available.
 
 Extract the entire archive, including its documentation and `third_party` notices.
 
@@ -82,7 +199,7 @@ The installer copies `whytie.exe` to:
 
 and adds that directory to your user `PATH`.
 
-After installation, open a new terminal and verify:
+Open a new terminal and verify:
 
 ```powershell
 whytie version
@@ -108,7 +225,7 @@ To uninstall WhyTie from the extracted package directory:
 
 The uninstaller removes the installed executable and its user `PATH` entry. Existing project `.whytie` directories are not deleted.
 
-The `.cmd` wrappers invoke the bundled PowerShell scripts for the installation or removal process without requiring the user to permanently change their PowerShell execution policy.
+The `.cmd` wrappers invoke the bundled PowerShell scripts for installation or removal without requiring the user to permanently change their PowerShell execution policy.
 
 ### Linux and macOS
 
@@ -130,6 +247,8 @@ cp ./whytie ~/.local/bin/whytie
 
 Make sure `~/.local/bin` is on your `PATH`.
 
+---
+
 ## Quick start
 
 Move to the root of a project:
@@ -150,6 +269,7 @@ Add reasoning next to code:
 // ? How should shutdown handle pending writes?
 // + Flush pending writes before shutdown
 // < Prevent user data loss
+
 func Shutdown() {}
 ```
 
@@ -157,18 +277,6 @@ Scan the project:
 
 ```powershell
 whytie scan .
-```
-
-WhyTie displays the reasoning it found:
-
-```text
-📄 shutdown.go
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-    1  ❓ QUESTION  How should shutdown handle pending writes?
-
-    2  ✅ DECISION  Flush pending writes before shutdown
-    3  └─ 💡 REASON    Prevent user data loss
 ```
 
 List saved reasoning:
@@ -195,18 +303,20 @@ Return to recently recorded context:
 whytie resume
 ```
 
+---
+
 ## Reasoning syntax
 
 WhyTie uses small markers inside source comments.
 
-| Marker | Meaning           |
-| ------ | ----------------- |
-| `?`    | Question          |
-| `+`    | Decision          |
-| `x`    | Rejected approach |
-| `f`    | Failed approach   |
-| `<`    | Reason            |
-| `!`    | Important context |
+| Marker | Meaning |
+| --- | --- |
+| `?` | Question |
+| `+` | Decision |
+| `x` | Rejected approach |
+| `f` | Failed approach |
+| `<` | Reason |
+| `!` | Important context |
 
 Example:
 
@@ -222,6 +332,24 @@ Example:
 ```
 
 The markers are intentionally small so the source remains readable without WhyTie.
+
+### Rejected vs failed
+
+Use `x` when an approach was considered and intentionally rejected:
+
+```go
+// x Run PostgreSQL locally
+// < Adds infrastructure the tool does not need
+```
+
+Use `f` when an approach was actually attempted and did not work:
+
+```go
+// f Reconcile entries using line number alone
+// < Refactors caused identities to drift when code moved
+```
+
+This distinction helps future readers understand whether an option was merely declined or proven problematic in practice.
 
 ### Block comments
 
@@ -251,16 +379,18 @@ Comment-like text inside supported string and template-literal contexts is not t
 
 ### Language-specific prefixes
 
-| Source files                                                    | Annotation form                                  |
-| --------------------------------------------------------------- | ------------------------------------------------ |
+| Source files | Annotation form |
+| --- | --- |
 | Go, Rust, C/C++, C#, Java, Kotlin, JavaScript/TypeScript, Swift | `// ? Question` and supported `/* ... */` blocks |
-| Python, Ruby, shell scripts, PowerShell, YAML                   | `# ? Question`                                   |
-| CSS, SCSS, Sass, Less                                           | `/* ? Question */`                               |
-| HTML                                                            | `<!-- ? Question -->`                            |
+| Python, Ruby, shell scripts, PowerShell, YAML | `# ? Question` |
+| CSS, SCSS, Sass, Less | `/* ? Question */` |
+| HTML | `<!-- ? Question -->` |
 
 Use standalone comment lines. Trailing annotations after code are not currently captured.
 
 Language support is lightweight scanning, not complete parsing of every supported language.
+
+---
 
 ## Commands
 
@@ -279,7 +409,7 @@ whytie -h
 
 Running `whytie` without a command also displays help.
 
-### Initialize
+### `whytie init`
 
 ```powershell
 whytie init
@@ -287,7 +417,7 @@ whytie init
 
 Creates the local `.whytie` directory. Its internal `.gitignore` keeps local database files out of Git.
 
-### Scan
+### `whytie scan`
 
 From the project root:
 
@@ -314,11 +444,11 @@ Reasoning is displayed using the shared WhyTie file-oriented layout. When a sour
 
 ────────────────────────────────────────────────────
 
-    9  ❌ FAILED    Avoid hidden global state
+    9  ⚠️ FAILED    Avoid hidden global state
    10  └─ 💡 REASON    The calculation does not need persistent state
 ```
 
-### List
+### `whytie list`
 
 ```powershell
 whytie list
@@ -328,7 +458,7 @@ Displays currently stored reasoning.
 
 The output is organized around source files and uses the same line numbers, icons, labels, and visual separators as other reasoning-oriented WhyTie commands.
 
-### Why
+### `whytie why`
 
 ```powershell
 whytie why shutdown.go:2
@@ -345,7 +475,7 @@ Use the source location shown by WhyTie. Quote paths containing spaces:
 whytie why "src/my file.go:10"
 ```
 
-### History
+### `whytie history`
 
 ```powershell
 whytie history shutdown.go:2
@@ -369,16 +499,16 @@ History
 
 Recorded lifecycle events include:
 
-- `created`: an annotation was first stored.
-- `changed`: its text or kind changed.
-- `moved`: its stored file or line changed.
+- `created`: an annotation was first stored,
+- `changed`: its text or kind changed,
+- `moved`: its stored file or line changed,
 - `deleted`: it was no longer found during synchronization.
 
 Events may include Git commit information when available.
 
 History records changes observed by scans. Changes made and undone between scans are not recorded.
 
-### Resume
+### `whytie resume`
 
 ```powershell
 whytie resume
@@ -386,10 +516,10 @@ whytie resume
 
 Shows:
 
-- The five most recently saved history events.
-- Event snapshots, recording times, and available commit information.
-- Related context from currently stored annotations.
-- An `Inspect` command for each displayed context block.
+- the five most recently saved history events,
+- event snapshots, recording times, and available commit information,
+- related context from currently stored annotations,
+- an `Inspect` command for each displayed context block.
 
 Related current context uses the same file-oriented reasoning layout as `scan`, `list`, and `why`.
 
@@ -397,13 +527,13 @@ Related context blocks are displayed once, even when several recent events belon
 
 Historical event snapshots and currently stored context are separate. Deleted annotations can appear in the event list, but are not shown as current context.
 
-Resume reads saved data. It does not rescan source files, determine what you last worked on, or mark questions as resolved or unresolved.
+`resume` reads saved data. It does not rescan source files, determine what you last worked on, or mark questions as resolved or unresolved.
 
 "Newest" means most recently inserted into the local history. Within one scan, this does not establish the order in which you actually edited the code.
 
-If saved reasoning exists without history, Resume directs you to `whytie list`.
+If saved reasoning exists without history, `resume` directs you to `whytie list`.
 
-### Help
+### `whytie help`
 
 ```powershell
 whytie help
@@ -415,13 +545,15 @@ Displays command usage and the annotation marker reference.
 
 Running `whytie` with no arguments displays the same help information.
 
-### Version
+### `whytie version`
 
 ```powershell
 whytie version
 ```
 
 Displays the version embedded in the executable.
+
+---
 
 ## Reasoning survives recognized changes
 
@@ -456,6 +588,8 @@ Deleted-history lookup by location is supported. The current ID-based history co
 
 Identity matching is best-effort. Arbitrary refactoring, duplicate annotations, or ambiguous edits may not preserve the intended match.
 
+---
+
 ## Local storage and privacy
 
 Project data is stored in:
@@ -472,6 +606,8 @@ Source comments remain readable without WhyTie. The local database preserves ide
 
 The database is not committed to Git by default. A fresh clone does not automatically include its history. Keep a backup of `.whytie` if you need to preserve that local history.
 
+---
+
 ## Git integration
 
 WhyTie attaches Git provenance where available and can operate outside a Git repository.
@@ -480,10 +616,29 @@ A displayed commit is provenance attached to the event. It is not proof that the
 
 WhyTie does not automatically reconstruct all annotations from the repository's past commits.
 
+---
+
+## What WhyTie is not
+
+WhyTie is intentionally narrow.
+
+It is not:
+
+- a replacement for Git,
+- a general-purpose documentation platform,
+- an issue tracker,
+- an AI coding agent,
+- an automatic architecture decision generator,
+- a complete work-session recorder.
+
+Its job is to preserve small pieces of reasoning close to the code and make them retrievable later.
+
+---
+
 ## Current limitations
 
 - Scanning is explicit; source changes are not captured automatically.
-- Resume shows saved context, not a complete work-session summary.
+- `resume` shows saved context, not a complete work-session summary.
 - Questions have no tracked resolution status.
 - Relationships primarily rely on adjacent source annotations.
 - Language scanners do not fully model every language's syntax.
@@ -493,6 +648,8 @@ WhyTie does not automatically reconstruct all annotations from the repository's 
 - There is no dedicated export command yet.
 - There is no Change Guard, impact analysis, GUI, or editor integration.
 - Release packages are not publisher-signed; macOS packages are not notarized.
+
+---
 
 ## Development
 
@@ -513,6 +670,8 @@ Run directly from source:
 ```powershell
 go run ./cmd/whytie resume
 ```
+
+---
 
 ## License
 
