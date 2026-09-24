@@ -72,10 +72,10 @@ func TestResumeIncludesDecisionWhenReasonChanges(t *testing.T) {
 
 	got := out.String()
 	for _, want := range []string{
-		"decision: Flush writes before shutdown",
-		"reason: Prevent pending write loss",
-		"shutdown.go:10",
-		"shutdown.go:11",
+		"DECISION  Flush writes before shutdown",
+		"REASON    Prevent pending write loss",
+		"10  ✅ DECISION",
+		"11  └─ 💡 REASON",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %q in output:\n%s", want, got)

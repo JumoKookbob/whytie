@@ -118,8 +118,11 @@ func TestWhyWritesMemoryAndReasons(t *testing.T) {
 	}
 
 	want := "" +
-		"decision: SQLite를 사용한다  example.go:3\n" +
-		"└─ reason: local-first에 적합하기 때문에  example.go:4\n"
+		"📄 example.go\n" +
+		"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
+		"\n" +
+		"    3  ✅ DECISION  SQLite를 사용한다\n" +
+		"    4  └─ 💡 REASON    local-first에 적합하기 때문에\n"
 
 	if stdout.String() != want {
 		t.Errorf(
@@ -253,8 +256,11 @@ func TestWhyAtWritesMemoryAndReasonsFromLocation(t *testing.T) {
 	}
 
 	want := "" +
-		"decision: SQLite를 사용한다  example.go:10\n" +
-		"└─ reason: local-first에 적합하기 때문에  example.go:11\n"
+		"📄 example.go\n" +
+		"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
+		"\n" +
+		"   10  ✅ DECISION  SQLite를 사용한다\n" +
+		"   11  └─ 💡 REASON    local-first에 적합하기 때문에\n"
 
 	if stdout.String() != want {
 		t.Errorf(
@@ -615,10 +621,14 @@ func TestWhyOnQuestionWritesDecisionAndReasons(t *testing.T) {
 	}
 
 	want := "" +
-		"question: 어떤 DB를 쓸까?  example.go:10\n" +
-		"└─ decision: SQLite를 사용한다  example.go:11\n" +
-		"   └─ reason: local-first에 적합하기 때문에  example.go:12\n" +
-		"   └─ reason: 별도 서버가 필요 없기 때문에  example.go:13\n"
+		"📄 example.go\n" +
+		"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
+		"\n" +
+		"   10  ❓ QUESTION  어떤 DB를 쓸까?\n" +
+		"\n" +
+		"   11  ✅ DECISION  SQLite를 사용한다\n" +
+		"   12  └─ 💡 REASON    local-first에 적합하기 때문에\n" +
+		"   13  └─ 💡 REASON    별도 서버가 필요 없기 때문에\n"
 
 	if stdout.String() != want {
 		t.Errorf(

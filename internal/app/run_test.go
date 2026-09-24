@@ -114,8 +114,12 @@ func TestRunScanOpensRepositoryScansAndPersists(t *testing.T) {
 		t.Fatalf("RunScan() error = %v", err)
 	}
 
-	want := "decision: SQLite를 사용한다  example.go:3\n" +
-		"└─ reason: local-first에 적합하기 때문에  example.go:4\n"
+	want := "" +
+		"📄 example.go\n" +
+		"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
+		"\n" +
+		"    3  ✅ DECISION  SQLite를 사용한다\n" +
+		"    4  └─ 💡 REASON    local-first에 적합하기 때문에\n"
 
 	if output.String() != want {
 		t.Errorf(
@@ -218,8 +222,12 @@ func TestRunScanFromNestedDirectoryFindsRepositoryRoot(t *testing.T) {
 		t.Fatalf("RunScanFrom() error = %v", err)
 	}
 
-	scanWant := "decision: SQLite를 사용한다  example.go:3\n" +
-		"└─ reason: local-first에 적합하기 때문에  example.go:4\n"
+	scanWant := "" +
+		"📄 example.go\n" +
+		"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
+		"\n" +
+		"    3  ✅ DECISION  SQLite를 사용한다\n" +
+		"    4  └─ 💡 REASON    local-first에 적합하기 때문에\n"
 
 	if output.String() != scanWant {
 		t.Errorf(
@@ -555,8 +563,11 @@ func TestRunWhyCommand(t *testing.T) {
 	}
 
 	want := "" +
-		"decision: SQLite를 사용한다  example.go:3\n" +
-		"└─ reason: local-first에 적합하기 때문에  example.go:4\n"
+		"📄 example.go\n" +
+		"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
+		"\n" +
+		"    3  ✅ DECISION  SQLite를 사용한다\n" +
+		"    4  └─ 💡 REASON    local-first에 적합하기 때문에\n"
 
 	if stdout.String() != want {
 		t.Errorf(
@@ -632,8 +643,11 @@ func TestRunWhyCommandAcceptsLocation(t *testing.T) {
 	}
 
 	want := "" +
-		"decision: SQLite를 사용한다  example.go:10\n" +
-		"└─ reason: local-first에 적합하기 때문에  example.go:11\n"
+		"📄 example.go\n" +
+		"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
+		"\n" +
+		"   10  ✅ DECISION  SQLite를 사용한다\n" +
+		"   11  └─ 💡 REASON    local-first에 적합하기 때문에\n"
 
 	if stdout.String() != want {
 		t.Errorf(
@@ -744,7 +758,11 @@ func TestWhyOnReasonWritesOnlyReason(t *testing.T) {
 		t.Fatalf("Why() error = %v", err)
 	}
 
-	want := "reason: local-first에 적합하기 때문에  example.go:11\n"
+	want := "" +
+		"📄 example.go\n" +
+		"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
+		"\n" +
+		"   11  💡 REASON    local-first에 적합하기 때문에\n"
 
 	if stdout.String() != want {
 		t.Errorf(
@@ -852,12 +870,14 @@ func TestRunHistoryCommand(t *testing.T) {
 	}
 
 	wants := []string{
-		"decision: SQLite를 사용한다",
-		"internal/storage/db.go:24",
-		"created",
+		"DECISION  SQLite를 사용한다",
+		"internal/storage/db.go",
+		"24  ✅ DECISION",
+		"History",
+		"CREATED",
 		"example.go:10",
 		"commit 1234567",
-		"moved",
+		"MOVED",
 		"commit abcdef1",
 	}
 
@@ -937,10 +957,11 @@ func TestRunHistoryCommandAcceptsLocation(t *testing.T) {
 	}
 
 	wants := []string{
-		"decision: SQLite를 사용한다",
-		"example.go:10",
-		"history:",
-		"created",
+		"DECISION  SQLite를 사용한다",
+		"example.go",
+		"10  ✅ DECISION",
+		"History",
+		"CREATED",
 		"commit 1234567",
 	}
 

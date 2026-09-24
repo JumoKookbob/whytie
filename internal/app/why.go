@@ -6,7 +6,10 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/JumoKookbob/whytie/internal/formatter"
 	"github.com/JumoKookbob/whytie/internal/memory"
+	"github.com/JumoKookbob/whytie/internal/reasoning"
+	"github.com/JumoKookbob/whytie/internal/scanner"
 	"github.com/JumoKookbob/whytie/internal/storage"
 	"github.com/JumoKookbob/whytie/internal/syntax"
 )
@@ -68,54 +71,39 @@ func Why(w io.Writer, store storage.Store, id string) error {
 		return err
 	}
 
-	fmt.Fprintf(
-		w,
-		"%s: %s  %s:%d\n",
-		target.Kind,
-		target.Text,
-		target.CurrentPath,
-		target.CurrentLine,
-	)
+	comments := []scanner.SourceComment{
+		memory.ToSourceComment(target),
+	}
 
 	if target.Kind == syntax.Question {
 		decision, ok := FindDecision(memories, id)
-		if !ok {
-			return nil
+		if ok {
+			comments = append(
+				comments,
+				memory.ToSourceComment(decision),
+			)
+
+			for _, reason := range FindReasons(memories, decision.ID) {
+				comments = append(
+					comments,
+					memory.ToSourceComment(reason),
+				)
+			}
 		}
-
-		fmt.Fprintf(
-			w,
-			"└─ %s: %s  %s:%d\n",
-			decision.Kind,
-			decision.Text,
-			decision.CurrentPath,
-			decision.CurrentLine,
-		)
-
-		for _, reason := range FindReasons(memories, decision.ID) {
-			fmt.Fprintf(
-				w,
-				"   └─ %s: %s  %s:%d\n",
-				reason.Kind,
-				reason.Text,
-				reason.CurrentPath,
-				reason.CurrentLine,
+	} else {
+		for _, reason := range FindReasons(memories, id) {
+			comments = append(
+				comments,
+				memory.ToSourceComment(reason),
 			)
 		}
-
-		return nil
 	}
 
-	for _, reason := range FindReasons(memories, id) {
-		fmt.Fprintf(
-			w,
-			"└─ %s: %s  %s:%d\n",
-			reason.Kind,
-			reason.Text,
-			reason.CurrentPath,
-			reason.CurrentLine,
-		)
+	block := reasoning.Block{
+		Items: comments,
 	}
+
+	formatter.WriteBlock(w, block)
 
 	return nil
 }

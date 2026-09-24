@@ -52,8 +52,7 @@ func TestScanScansSyncsAndWritesReasoning(t *testing.T) {
 	source := `package example
 
 //+ SQLite를 사용한다
-//< local-first에 적합하기 때문에
-`
+//< local-first에 적합하기 때문에`
 
 	path := dir + "/example.go"
 
@@ -77,8 +76,12 @@ func TestScanScansSyncsAndWritesReasoning(t *testing.T) {
 		)
 	}
 
-	want := "decision: SQLite를 사용한다  example.go:3\n" +
-		"└─ reason: local-first에 적합하기 때문에  example.go:4\n"
+	want := "" +
+		"📄 example.go\n" +
+		"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
+		"\n" +
+		"    3  ✅ DECISION  SQLite를 사용한다\n" +
+		"    4  └─ 💡 REASON    local-first에 적합하기 때문에\n"
 
 	if output.String() != want {
 		t.Errorf(

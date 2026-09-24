@@ -5,8 +5,11 @@ import (
 	"io"
 	"strings"
 
+	"github.com/JumoKookbob/whytie/internal/formatter"
 	"github.com/JumoKookbob/whytie/internal/history"
 	"github.com/JumoKookbob/whytie/internal/memory"
+	"github.com/JumoKookbob/whytie/internal/reasoning"
+	"github.com/JumoKookbob/whytie/internal/scanner"
 	"github.com/JumoKookbob/whytie/internal/storage"
 )
 
@@ -16,21 +19,25 @@ func History(w io.Writer, store storage.HistoryStore, m memory.Memory) error {
 		return err
 	}
 
-	fmt.Fprintf(
-		w,
-		"%s: %s  %s:%d\n",
-		m.Kind,
-		m.Text,
-		m.CurrentPath,
-		m.CurrentLine,
-	)
+	block := reasoning.Block{
+		Items: []scanner.SourceComment{
+			memory.ToSourceComment(m),
+		},
+	}
+
+	formatter.WriteBlock(w, block)
 
 	if len(events) == 0 {
-		fmt.Fprintln(w, "\nhistory: none")
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, "History")
+		fmt.Fprintln(w, formatter.BlockSeparator)
+		fmt.Fprintln(w, "  none")
 		return nil
 	}
 
-	fmt.Fprintln(w, "\nhistory:")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "History")
+	fmt.Fprintln(w, formatter.BlockSeparator)
 
 	for _, event := range events {
 		writeHistoryEvent(w, event)
@@ -104,7 +111,7 @@ func writeHistoryEvent(w io.Writer, event history.Event) {
 	fmt.Fprintf(
 		w,
 		"  %-7s  %s:%d\n",
-		event.Type,
+		strings.ToUpper(string(event.Type)),
 		event.Path,
 		event.Line,
 	)

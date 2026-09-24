@@ -78,12 +78,14 @@ func TestHistoryWritesReasoningHistory(t *testing.T) {
 	got := output.String()
 
 	wants := []string{
-		"decision: SQLite를 사용한다",
-		"internal/storage/db.go:24",
-		"created",
+		"DECISION  SQLite를 사용한다",
+		"internal/storage/db.go",
+		"24  ✅ DECISION",
+		"History",
+		"CREATED",
 		"main.go:10",
 		"commit 1234567",
-		"moved",
+		"MOVED",
 		"commit abcdef1",
 	}
 

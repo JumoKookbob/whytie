@@ -40,14 +40,35 @@ func Scan(w io.Writer, store storage.Store, path string) error {
 
 	blocks := reasoning.Group(comments)
 
-	for i, block := range blocks {
-		if i > 0 {
-			if _, err := io.WriteString(w, "\n"); err != nil {
+	currentFile := ""
+
+	for _, block := range blocks {
+		items := reasoning.AttachReasons(block)
+		if len(items) == 0 {
+			continue
+		}
+
+		path := items[0].Comment.RelativePath
+
+		if path != currentFile {
+			if currentFile != "" {
+				if _, err := io.WriteString(w, "\n"); err != nil {
+					return err
+				}
+			}
+
+			formatter.WriteFileHeader(w, path)
+			currentFile = path
+		} else {
+			if _, err := io.WriteString(
+				w,
+				"\n"+formatter.BlockSeparator+"\n\n",
+			); err != nil {
 				return err
 			}
 		}
 
-		formatter.WriteBlock(w, block)
+		formatter.WriteBlockBody(w, block)
 	}
 
 	return nil

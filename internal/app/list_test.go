@@ -34,7 +34,7 @@ func TestListWritesReasoningStructure(t *testing.T) {
 			{
 				ID:          "memory-1",
 				Kind:        syntax.Decision,
-				Text:        "SQLite",
+				Text:        "Use SQLite",
 				CreatedPath: "internal/store/db.go",
 				CreatedLine: 20,
 				CurrentPath: "internal/store/db.go",
@@ -43,7 +43,7 @@ func TestListWritesReasoningStructure(t *testing.T) {
 			{
 				ID:          "memory-2",
 				Kind:        syntax.Reason,
-				Text:        "local-first에 적합함",
+				Text:        "It fits the local-first design",
 				CreatedPath: "internal/store/db.go",
 				CreatedLine: 21,
 				CurrentPath: "internal/store/db.go",
@@ -52,7 +52,7 @@ func TestListWritesReasoningStructure(t *testing.T) {
 			{
 				ID:          "memory-3",
 				Kind:        syntax.Question,
-				Text:        "캐시는 어떻게 처리할까?",
+				Text:        "How should caching work?",
 				CreatedPath: "internal/store/db.go",
 				CreatedLine: 50,
 				CurrentPath: "internal/store/db.go",
@@ -72,12 +72,12 @@ func TestListWritesReasoningStructure(t *testing.T) {
 		"📄 internal/store/db.go\n" +
 		"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
 		"\n" +
-		"   40  ✅ DECISION  SQLite\n" +
-		"   41  └─ 💡 REASON    local-first에 적합함\n" +
+		"   40  ✅ DECISION  Use SQLite\n" +
+		"   41  └─ 💡 REASON    It fits the local-first design\n" +
 		"\n" +
 		"────────────────────────────────────────────────────\n" +
 		"\n" +
-		"   50  ❓ QUESTION  캐시는 어떻게 처리할까?\n"
+		"   50  ❓ QUESTION  How should caching work?\n"
 
 	if output.String() != want {
 		t.Errorf(
