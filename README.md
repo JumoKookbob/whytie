@@ -17,16 +17,16 @@ func Shutdown() {}
 
 ## Status
 
-This source version is WhyTie v1.2.0.
+This source version is WhyTie v1.2.1.
 
 See [GitHub Releases](https://github.com/JumoKookbob/whytie/releases) for published versions and downloadable packages.
 
-Changes in v1.2.0 include:
+Changes in v1.2.1 include:
 
-- `whytie help`, `whytie --help`, and `whytie -h`.
-- A redesigned `whytie list` grouped by source file with separators, icons, and terminal colors.
-- Multiline `/* ... */` and `/** ... */` WhyTie annotations for supported slash-comment languages.
-- Windows install and uninstall scripts so users do not need to create a manual alias or PATH entry.
+- Unified reasoning output across `scan`, `list`, `why`, `history`, and `resume`.
+- A consistent file-oriented layout with line numbers, icons, labels, and separators.
+- Multiple reasoning blocks from the same source file are grouped under a single file header in `scan`.
+- `history` displays the current reasoning entry using the shared WhyTie output style before its recorded history.
 
 WhyTie is under active development. Automated tests and manual checks cover creation, editing, movement, deletion, persistence, retrieval, block-comment scanning, and CLI behavior.
 
@@ -41,7 +41,7 @@ WhyTie is under active development. Automated tests and manual checks cover crea
 - Keeps historical snapshots after annotations disappear.
 - Attaches Git provenance when available.
 - Shows recent recorded events and related context with `resume`.
-- Presents current reasoning in a file-oriented `list` view.
+- Presents reasoning using a consistent file-oriented CLI layout.
 
 WhyTie retrieves what you recorded. It does not invent explanations or infer your next task.
 
@@ -49,16 +49,16 @@ WhyTie retrieves what you recorded. It does not invent explanations or infer you
 
 ### Release packages
 
-The v1.2.0 package targets and archive names are:
+The v1.2.1 package targets and archive names are:
 
 | Platform                 | Package name                      |
 | ------------------------ | --------------------------------- |
-| Windows Intel/AMD 64-bit | `whytie-v1.2.0-windows-amd64.zip` |
-| Windows ARM64            | `whytie-v1.2.0-windows-arm64.zip` |
-| Linux x86-64             | `whytie-v1.2.0-linux-amd64.zip`   |
-| Linux ARM64              | `whytie-v1.2.0-linux-arm64.zip`   |
-| macOS Intel              | `whytie-v1.2.0-darwin-amd64.zip`  |
-| macOS Apple Silicon      | `whytie-v1.2.0-darwin-arm64.zip`  |
+| Windows Intel/AMD 64-bit | `whytie-v1.2.1-windows-amd64.zip` |
+| Windows ARM64            | `whytie-v1.2.1-windows-arm64.zip` |
+| Linux x86-64             | `whytie-v1.2.1-linux-amd64.zip`   |
+| Linux ARM64              | `whytie-v1.2.1-linux-arm64.zip`   |
+| macOS Intel              | `whytie-v1.2.1-darwin-amd64.zip`  |
+| macOS Apple Silicon      | `whytie-v1.2.1-darwin-arm64.zip`  |
 
 `darwin` means macOS.
 
@@ -82,7 +82,7 @@ The installer copies `whytie.exe` to:
 
 and adds that directory to your user `PATH`.
 
-After installation, use WhyTie from a terminal:
+After installation, open a new terminal and verify:
 
 ```powershell
 whytie version
@@ -114,65 +114,39 @@ The `.cmd` wrappers invoke the bundled PowerShell scripts for the installation o
 
 Open a terminal in the extracted package directory:
 
-```sh
+```bash
 chmod +x ./whytie
 ./whytie version
-whytie_bin="$(pwd)/whytie"
 ```
 
-Then switch to your project directory and run:
+You can run WhyTie directly from that directory or move the executable to a directory on your `PATH`.
 
-```sh
-"$whytie_bin" init
-"$whytie_bin" scan .
-"$whytie_bin" list
-"$whytie_bin" resume
+For example:
+
+```bash
+mkdir -p ~/.local/bin
+cp ./whytie ~/.local/bin/whytie
 ```
 
-The executable is a command-line tool; use it from a terminal.
-
-### Verification status
-
-All six targets are cross-compiled as part of the release process.
-
-Windows amd64 is runtime-tested locally. Other cross-compiled targets may not have been runtime-tested on their target operating systems.
-
-Release packages are not publisher-signed. macOS packages are not notarized.
-
-### Build from source on Windows
-
-Prerequisites:
-
-- Git
-- Go compatible with the `go.mod` requirement
-- PowerShell
-
-Clone and build the current `main` branch:
-
-```powershell
-git clone https://github.com/JumoKookbob/whytie.git
-Set-Location .\whytie
-go build -o .\whytie.exe .\cmd\whytie
-.\whytie.exe version
-```
-
-You can run the local executable as `.\whytie.exe`, or install a release package to make `whytie` available on your user `PATH`.
-
-Building may require network access to download Go dependencies. Normal scanning and retrieval operate locally.
+Make sure `~/.local/bin` is on your `PATH`.
 
 ## Quick start
 
-After installing WhyTie, create or open a project and initialize it:
+Move to the root of a project:
+
+```powershell
+cd path\to\your-project
+```
+
+Initialize WhyTie:
 
 ```powershell
 whytie init
 ```
 
-Add annotations next to the code:
+Add reasoning next to code:
 
 ```go
-package demo
-
 // ? How should shutdown handle pending writes?
 // + Flush pending writes before shutdown
 // < Prevent user data loss
@@ -185,102 +159,95 @@ Scan the project:
 whytie scan .
 ```
 
-List recorded reasoning:
+WhyTie displays the reasoning it found:
+
+```text
+📄 shutdown.go
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    1  ❓ QUESTION  How should shutdown handle pending writes?
+
+    2  ✅ DECISION  Flush pending writes before shutdown
+    3  └─ 💡 REASON    Prevent user data loss
+```
+
+List saved reasoning:
 
 ```powershell
 whytie list
 ```
 
-The v1.2 list view groups reasoning by file and visually separates blocks. When output is written directly to a supported terminal, reasoning kinds can also be colorized.
-
-Retrieve the question and its associated decision and reason:
+Inspect a specific annotation:
 
 ```powershell
-whytie why shutdown.go:3
+whytie why shutdown.go:2
 ```
 
-Return to recent recorded context:
+Review its history:
+
+```powershell
+whytie history shutdown.go:2
+```
+
+Return to recently recorded context:
 
 ```powershell
 whytie resume
 ```
 
-Inspect the decision's history:
+## Reasoning syntax
 
-```powershell
-whytie history shutdown.go:4
-```
+WhyTie uses small markers inside source comments.
 
-Git is optional for this workflow.
+| Marker | Meaning           |
+| ------ | ----------------- |
+| `?`    | Question          |
+| `+`    | Decision          |
+| `x`    | Rejected approach |
+| `f`    | Failed approach   |
+| `<`    | Reason            |
+| `!`    | Important context |
 
-## Annotation syntax
-
-Each marker must be followed by a space or tab and nonempty text.
-
-| Example                                     | Meaning           |
-| ------------------------------------------- | ----------------- |
-| `// ? How should this work?`                | Question          |
-| `// + Use this approach`                    | Decision          |
-| `// < It preserves existing behavior`       | Reason            |
-| `// - Reject the shared-cache approach`     | Rejected approach |
-| `// x The asynchronous attempt lost writes` | Failed approach   |
-| `// ! Preserve shutdown ordering`           | Important context |
-
-Both forms are accepted:
+Example:
 
 ```go
-//? How should this work?
-// ? How should this work?
-```
-
-This form is not accepted:
-
-```go
-//?How should this work?
-```
-
-Keep related annotations on consecutive lines in the same file:
-
-```go
-// ? Which storage should we use?
+// ? Which database should we use?
 // + Use SQLite
-// < Keep data local
-// < Avoid requiring a separate server
+// < It fits the local-first design
+
+// x Run PostgreSQL locally
+// < Adds infrastructure the tool does not need
+
+// ! Keep the reasoning database out of Git
 ```
 
-The current grouping rules use adjacency. They do not infer semantic relationships between distant comments.
-
-For `why`, place a decision immediately after its question, and reasons immediately after the decision.
+The markers are intentionally small so the source remains readable without WhyTie.
 
 ### Block comments
 
-WhyTie v1.2.0 supports block-style annotations in supported slash-comment languages.
+Supported slash-comment languages can also use multiline block comments:
 
-Single-line block comments are supported:
-
-```javascript
-/* + Use a linear search for the prototype */
+```go
+/*
+? Which database should we use?
++ Use SQLite
+< It fits the local-first design
+*/
 ```
 
-Multiline block comments and JSDoc-style blocks can contain WhyTie annotations:
-
-```javascript
-/**
- * + Use a linear search for the prototype
- * < The current data set is small
- */
-```
-
-Ordinary JSDoc without WhyTie markers is ignored:
+JSDoc-style blocks are also supported when they contain WhyTie markers:
 
 ```javascript
 /**
- * Returns a user by ID.
- * @param id user ID
+ * ? Where should browser interaction live?
+ * + Keep UI behavior in a separate JavaScript file
+ * < Separating behavior keeps the HTML easier to inspect
  */
 ```
 
-Comment-like text inside protected string or template-literal contexts is not treated as WhyTie reasoning by the scanner behavior covered by the current tests.
+Ordinary block or JSDoc comments without WhyTie markers are ignored.
+
+Comment-like text inside supported string and template-literal contexts is not treated as WhyTie reasoning by the scanner behavior covered by the current tests.
 
 ### Language-specific prefixes
 
@@ -334,6 +301,23 @@ Run a scan after editing, moving, or removing annotations. There is no automatic
 
 Generated and dependency directories such as `.git`, `.whytie`, `node_modules`, `vendor`, `dist`, `build`, and `target` are skipped. Filenames containing `.min.` are also skipped during directory scans.
 
+Reasoning is displayed using the shared WhyTie file-oriented layout. When a source file contains multiple separate reasoning blocks, `scan` groups them under one file header and separates the blocks visually:
+
+```text
+📄 calculator.py
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    1  ❓ QUESTION  How should calculations be implemented?
+
+    2  ✅ DECISION  Use small explicit functions
+    3  └─ 💡 REASON    Simple functions make this language test easy to understand
+
+────────────────────────────────────────────────────
+
+    9  ❌ FAILED    Avoid hidden global state
+   10  └─ 💡 REASON    The calculation does not need persistent state
+```
+
 ### List
 
 ```powershell
@@ -342,16 +326,16 @@ whytie list
 
 Displays currently stored reasoning.
 
-In v1.2.0, the output is organized around source files, includes line numbers and visual separators, and uses icons for reasoning kinds. When writing directly to a supported terminal, WhyTie can add colors without inserting ANSI color codes into non-terminal output such as test buffers.
+The output is organized around source files and uses the same line numbers, icons, labels, and visual separators as other reasoning-oriented WhyTie commands.
 
 ### Why
 
 ```powershell
-whytie why shutdown.go:4
+whytie why shutdown.go:2
 whytie why <memory-id>
 ```
 
-Displays a stored annotation and its associated context.
+Displays a stored annotation and its associated context using the shared WhyTie reasoning layout.
 
 A question can lead to its adjacent decision and reasons. A decision can lead to its adjacent reasons.
 
@@ -364,11 +348,26 @@ whytie why "src/my file.go:10"
 ### History
 
 ```powershell
-whytie history shutdown.go:4
+whytie history shutdown.go:2
 whytie history <memory-id>
 ```
 
-Displays recorded lifecycle events:
+Displays the current reasoning entry followed by its recorded lifecycle events.
+
+Example:
+
+```text
+📄 calculator.py
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    2  ✅ DECISION  Use small explicit functions
+
+History
+────────────────────────────────────────────────────
+  CREATED  calculator.py:2
+```
+
+Recorded lifecycle events include:
 
 - `created`: an annotation was first stored.
 - `changed`: its text or kind changed.
@@ -392,13 +391,15 @@ Shows:
 - Related context from currently stored annotations.
 - An `Inspect` command for each displayed context block.
 
+Related current context uses the same file-oriented reasoning layout as `scan`, `list`, and `why`.
+
 Related context blocks are displayed once, even when several recent events belong to the same block.
 
 Historical event snapshots and currently stored context are separate. Deleted annotations can appear in the event list, but are not shown as current context.
 
 Resume reads saved data. It does not rescan source files, determine what you last worked on, or mark questions as resolved or unresolved.
 
-“Newest” means most recently inserted into the local history. Within one scan, this does not establish the order in which you actually edited the code.
+"Newest" means most recently inserted into the local history. Within one scan, this does not establish the order in which you actually edited the code.
 
 If saved reasoning exists without history, Resume directs you to `whytie list`.
 
@@ -432,14 +433,15 @@ whytie scan .
 
 When reconciliation recognizes the same reasoning, its memory ID is retained and the change is added to its history.
 
-For example, a reason can accumulate:
+For example, a reason can accumulate lifecycle events:
 
 ```text
-history:
-  created  shutdown.go:5
-  changed  shutdown.go:5
-  moved    lifecycle.go:5
-  deleted  lifecycle.go:5
+History
+────────────────────────────────────────────────────
+  CREATED  shutdown.go:5
+  CHANGED  shutdown.go:5
+  MOVED    lifecycle.go:5
+  DELETED  lifecycle.go:5
 ```
 
 After deletion, retrieve its recorded history using a historical location:

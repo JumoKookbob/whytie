@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.2.1] - 2026-09-24
+
+### Changed
+
+- Unified reasoning output across `scan`, `list`, `why`, `history`, and `resume`.
+- Reasoning annotations now use a consistent file header, line-number layout, icons, labels, and separators across commands.
+- `scan` now groups multiple reasoning blocks from the same source file under a single file header.
+- `history` now presents the current reasoning entry using the shared WhyTie output style before its recorded history.
+
 ## [1.2.0] - 2026-09-23
 
 ### Added

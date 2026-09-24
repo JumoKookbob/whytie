@@ -112,7 +112,7 @@ func Run(args []string, stdout io.Writer, stderr io.Writer, start string) int {
 		return 0
 
 	case "version":
-		fmt.Fprintln(stdout, "WhyTie v1.2.0")
+		fmt.Fprintln(stdout, "WhyTie v1.2.1")
 		return 0
 
 	case "init":
